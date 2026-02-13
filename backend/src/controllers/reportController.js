@@ -3,17 +3,40 @@ const Job = require('../models/Job');
 const Inventory = require('../models/Inventory');
 const Part = require('../models/Part');
 const Invoice = require('../models/Invoice');
+const Transaction = require('../models/Transaction');
+const { format } = require('date-fns');
 
 // @desc    Get dashboard/report stats
 // @route   GET /api/reports/stats
 // @access  Private
 const getReportStats = asyncHandler(async (req, res) => {
-    const storeId = req.user.storeId; // Filter by store if needed, or all if admin?
-    // For now, let's assume scoped to store or all if not specified
-    const match = storeId ? { storeId } : {};
+    const { startDate, endDate } = req.query;
+    let dateFilter = {};
+    
+    if (startDate && endDate) {
+        dateFilter = {
+            createdAt: {
+                $gte: new Date(startDate),
+                $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+            }
+        };
+    }
+
+    const match = req.user.storeId ? { storeId: req.user.storeId, ...dateFilter } : { ...dateFilter };
+    const invoiceMatch = req.user.storeId ? { storeId: req.user.storeId } : {};
+    
+    let revenueDateFilter = {};
+    if (startDate && endDate) {
+        revenueDateFilter = {
+            'paymentDetails.paidAt': {
+                $gte: new Date(startDate),
+                $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+            }
+        };
+    }
 
     // 1. Job Status Counts
-    const jobStats = await Job.aggregate([
+    const jobStatsRaw = await Job.aggregate([
         { $match: match },
         { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
@@ -22,37 +45,37 @@ const getReportStats = asyncHandler(async (req, res) => {
         pending: 0,
         in_progress: 0,
         completed: 0,
-        cancelled: 0
+        cancelled: 0,
+        diagnosing: 0,
+        waiting_parts: 0
     };
-
-    jobStats.forEach(stat => {
-        if (stats[stat._id] !== undefined) {
-            stats[stat._id] = stat.count;
-        }
+    jobStatsRaw.forEach(s => {
+        stats[s._id] = s.count;
     });
 
-    // 2. Low Stock Items (Accurate check against Part threshold)
-    const inventoryItems = await Inventory.find(match).populate('partId', 'reorder_threshold');
+    // 2. Low Stock Items (Threshold check)
+    const inventoryItems = await Inventory.find(req.user.storeId ? { storeId: req.user.storeId } : {}).populate('partId', 'reorder_threshold');
     const lowStockCount = inventoryItems.filter(item => 
         item.partId && item.quantity <= (item.partId.reorder_threshold || 5)
     ).length;
 
-    // 3. Revenue from PAID invoices
+    // 3. Total Revenue
     const revenueData = await Invoice.aggregate([
-        { $match: { ...match, status: 'paid' } },
+        { $match: { ...invoiceMatch, ...revenueDateFilter, status: 'paid' } },
         { $group: { _id: null, total: { $sum: '$total' } } }
     ]);
 
-    // 4. Weekly Revenue (Last 7 days)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    
+    // 4. Revenue Trend
+    const today = new Date();
+    const rangeStart = startDate ? new Date(startDate) : new Date(new Date().setDate(today.getDate() - 7));
+    const rangeEnd = endDate ? new Date(endDate) : today;
+
     const weeklyRevenueRaw = await Invoice.aggregate([
         { 
             $match: { 
-                ...match, 
+                ...invoiceMatch, 
                 status: 'paid',
-                'paymentDetails.paidAt': { $gte: sevenDaysAgo }
+                'paymentDetails.paidAt': { $gte: rangeStart, $lte: new Date(new Date(rangeEnd).setHours(23, 59, 59, 999)) }
             } 
         },
         {
@@ -64,60 +87,39 @@ const getReportStats = asyncHandler(async (req, res) => {
         { $sort: { "_id": 1 } }
     ]);
 
-    // Fill missing days with zero
-    const weeklyRevenue = [];
-    for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().split('T')[0];
-        const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-        const existing = weeklyRevenueRaw.find(r => r._id === dateStr);
-        weeklyRevenue.push({
-            name: dayName,
-            revenue: existing ? existing.dailyTotal : 0
-        });
-    }
+    const weeklyRevenue = weeklyRevenueRaw.map(item => ({
+        name: format(new Date(item._id), 'MMM dd'),
+        revenue: item.dailyTotal
+    }));
 
-    // 6. Material Usage Stats (New feat snap)
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    
-    const Transaction = require('../models/Transaction');
+    // 5. Material Usage
     const usageToday = await Transaction.aggregate([
-        {
-            $match: {
-                ...match,
-                timestamp: { $gte: startOfToday },
-                type: { $in: ['job_use', 'adjustment'] },
-                $or: [
-                    { type: 'job_use' },
-                    { type: 'adjustment', reason: 'technician_usage' }
-                ]
-            }
+        { 
+            $match: { 
+                ...(req.user.storeId ? { storeId: req.user.storeId } : {}),
+                type: 'job_use',
+                timestamp: { $gte: new Date(new Date().setHours(0,0,0,0)) }
+            } 
         },
-        { $group: { _id: null, totalQty: { $sum: { $abs: "$qtyChange" } } } }
+        { $group: { _id: null, totalQty: { $sum: { $abs: '$qtyChange' } } } }
     ]);
 
     const usageWeekly = await Transaction.aggregate([
-        {
-            $match: {
-                ...match,
-                timestamp: { $gte: sevenDaysAgo },
-                type: { $in: ['job_use', 'adjustment'] },
-                $or: [
-                    { type: 'job_use' },
-                    { type: 'adjustment', reason: 'technician_usage' }
-                ]
-            }
+        { 
+            $match: { 
+                ...(req.user.storeId ? { storeId: req.user.storeId } : {}),
+                type: 'job_use',
+                timestamp: { $gte: rangeStart }
+            } 
         },
-        { $group: { _id: null, totalQty: { $sum: { $abs: "$qtyChange" } } } }
+        { $group: { _id: null, totalQty: { $sum: { $abs: '$qtyChange' } } } }
     ]);
 
-    // 5. Recent Jobs
+    // 6. Recent Jobs
     const recentJobs = await Job.find(match)
         .sort({ createdAt: -1 })
         .limit(5)
-        .select('jobId device_model status createdAt customer');
+        .populate('customer', 'name');
 
     res.json({
         jobCounts: stats,
@@ -133,4 +135,125 @@ const getReportStats = asyncHandler(async (req, res) => {
     });
 });
 
-module.exports = { getReportStats };
+// @desc    Export Jobs Report to CSV
+const exportJobsReport = asyncHandler(async (req, res) => {
+    const { startDate, endDate } = req.query;
+    let dateFilter = {};
+    if (startDate && endDate) {
+        dateFilter = {
+            createdAt: { $gte: new Date(startDate), $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)) }
+        };
+    }
+    const match = req.user.storeId ? { storeId: req.user.storeId, ...dateFilter } : { ...dateFilter };
+    const jobs = await Job.find(match).populate('customer', 'name').sort({ createdAt: -1 });
+
+    let csv = 'Job ID,Customer,Model,Status,Total Cost,Labor,Created At\n';
+    jobs.forEach(j => {
+        csv += `${j.jobId},"${j.customer?.name || 'Walk-in'}","${j.device_model}",${j.status},${j.totalCost},${j.laborCost},${j.createdAt.toISOString()}\n`;
+    });
+
+    res.header('Content-Type', 'text/csv');
+    res.attachment(`jobs_report_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+});
+
+// @desc    Export Inventory Report to CSV
+const exportInventoryReport = asyncHandler(async (req, res) => {
+    const match = req.user.storeId ? { storeId: req.user.storeId } : {};
+    const inventory = await Inventory.find(match).populate('partId');
+
+    let csv = 'Part Name,SKU,Category,Quantity,In Stock,Reorder Level\n';
+    inventory.forEach(i => {
+        csv += `"${i.partId?.name}","${i.partId?.sku}","${i.partId?.category}",${i.quantity},${i.quantity > 0 ? 'Yes' : 'No'},${i.partId?.reorder_threshold}\n`;
+    });
+
+    res.header('Content-Type', 'text/csv');
+    res.attachment(`inventory_report_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+});
+
+// @desc    Export Revenue Report to CSV
+const exportRevenueReport = asyncHandler(async (req, res) => {
+    const { startDate, endDate } = req.query;
+    let dateFilter = {};
+    if (startDate && endDate) {
+        dateFilter = {
+            'paymentDetails.paidAt': { $gte: new Date(startDate), $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)) }
+        };
+    }
+    const match = req.user.storeId ? { storeId: req.user.storeId, status: 'paid', ...dateFilter } : { status: 'paid', ...dateFilter };
+    const invoices = await Invoice.find(match).populate('customer', 'name').sort({ createdAt: -1 });
+
+    let csv = 'Invoice ID,Customer,Amount,Subtotal,Tax,Discount,Paid At\n';
+    invoices.forEach(inv => {
+        csv += `${inv.invoiceId},"${inv.customer?.name || 'Walk-in'}",${inv.total},${inv.subtotal},${inv.tax},${inv.discount},${inv.paymentDetails?.paidAt?.toISOString() || inv.createdAt.toISOString()}\n`;
+    });
+
+    res.header('Content-Type', 'text/csv');
+    res.attachment(`revenue_report_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+});
+
+// @desc    Get raw data for custom reports
+// @route   GET /api/reports/data
+// @access  Private
+const getReportData = asyncHandler(async (req, res) => {
+    try {
+        const { type, startDate, endDate, minQty, status } = req.query;
+        let match = req.user.storeId ? { storeId: req.user.storeId } : {};
+
+        if (startDate && startDate !== '' && endDate && endDate !== '') {
+            const dateField = type === 'sales' ? 'paymentDetails.paidAt' : 'createdAt';
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            
+            if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                match[dateField] = {
+                    $gte: start,
+                    $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+                };
+            }
+        }
+
+        if (type === 'sales') {
+            const invoices = await Invoice.find({ ...match, status: 'paid' })
+                .sort({ 'paymentDetails.paidAt': -1 });
+            return res.json(invoices);
+        }
+
+        if (type === 'inventory') {
+            let invMatch = req.user.storeId ? { storeId: req.user.storeId } : {};
+            if (minQty && minQty !== '') {
+                invMatch.quantity = { $lt: Number(minQty) };
+            }
+            const inventory = await Inventory.find(invMatch)
+                .populate({
+                    path: 'partId',
+                    select: 'name sku category cost price reorder_threshold'
+                });
+            return res.json(inventory);
+        }
+
+        if (type === 'jobs') {
+            if (status) match.status = status;
+            const jobs = await Job.find(match)
+                .populate('assignedTechId', 'name')
+                .sort({ createdAt: -1 });
+            return res.json(jobs);
+        }
+
+        res.status(400);
+        throw new Error('Invalid report type');
+    } catch (error) {
+        console.error('Report Data Error:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+module.exports = {
+    getReportStats,
+    exportJobsReport,
+    exportInventoryReport,
+    exportRevenueReport,
+    getReportData
+};

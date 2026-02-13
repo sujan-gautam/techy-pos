@@ -5,6 +5,7 @@ import {
     FileText, ShoppingCart, Truck, LogOut, Settings, BarChart2, ShieldCheck, History
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import Logo from './Logo';
 
 const Sidebar = () => {
     const { logout, user } = useAuth();
@@ -95,13 +96,7 @@ const Sidebar = () => {
         <div className="h-screen w-64 bg-white border-r border-gray-200 flex flex-col fixed shadow-sm">
             {/* Logo */}
             <div className="p-6 border-b border-gray-200">
-                <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-black text-sm">T</div>
-                    <div>
-                        <h1 className="text-base font-bold text-gray-900 leading-none">Techy POS</h1>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Management Pro</p>
-                    </div>
-                </div>
+                <Logo />
             </div>
 
             {/* Navigation */}

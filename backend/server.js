@@ -78,19 +78,19 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('Socket disconnected');
     });
-    
-    // Example: socket.on('join_job', (jobId) => { socket.join(jobId); });
 });
 
-// Make io accessible in routes via req.app.get('io') or middleware
+// Make io accessible in routes
 app.set('io', io);
 
 const PORT = process.env.PORT || 5000;
 
-if (process.env.NODE_ENV !== 'test') {
+// Only listen if not in Vercel environment
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
     server.listen(PORT, () => {
         console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
     });
 }
 
+// Export app for Vercel
 module.exports = app;
