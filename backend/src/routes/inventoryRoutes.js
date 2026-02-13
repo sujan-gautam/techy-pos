@@ -9,6 +9,9 @@ router.route('/')
 
 router.post('/use', protect, logUsage); // Technician usage (Job optional)
 
+router.route('/:id/adjust')
+    .patch(protect, authorize('admin', 'manager', 'technician'), adjustInventory);
+
 router.get('/:id/allocations', protect, getInventoryAllocations);
 
 module.exports = router;
