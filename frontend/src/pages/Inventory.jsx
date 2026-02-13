@@ -35,7 +35,7 @@ const Inventory = () => {
     const [reportThreshold, setReportThreshold] = useState(5);
     const [showLowStockOnly, setShowLowStockOnly] = useState(false);
 
-    const canAdjust = user?.role === 'admin' || user?.role === 'manager';
+    const canAdjust = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'technician';
 
     const fetchInventory = async () => {
         try {
@@ -100,13 +100,14 @@ const Inventory = () => {
         try {
             await api.patch(`/inventory/${selectedItem._id}/adjust`, {
                 qtyChange: Number(qtyChange),
-                type: 'manual_adjustment'
+                type: 'manual_adjustment',
+                note: `Manual stock adjustment by ${user?.name} (${user?.role})`
             });
-            toast.success('Stock level adjusted');
+            toast.success('Stock level updated successfully');
             setShowModal(false);
             fetchInventory();
         } catch (error) {
-            toast.error('Adjustment failed');
+            toast.error(error.response?.data?.message || 'Adjustment failed');
         } finally {
             setSubmitting(false);
         }
@@ -203,62 +204,64 @@ const Inventory = () => {
             {/* Page Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-slate-200 pb-6">
                 <div>
-                    <h1 className="text-2xl font-semibold text-slate-900">Inventory</h1>
-                    <p className="text-slate-500 text-sm mt-1">Manage technical parts and spare material stocks.</p>
+                    <div className="flex items-center space-x-2 mb-1">
+                        <Package size={20} className="text-slate-400" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Material Logistics</span>
+                    </div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Inventory <span className="text-slate-400 font-light">Stock</span></h1>
                 </div>
                 <div className="flex items-center space-x-3 mt-4 md:mt-0">
-                    {canAdjust && (
+                    {user?.role !== 'technician' && (
                         <button
                             onClick={() => setShowReportModal(true)}
-                            className="flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-md hover:bg-slate-50 text-xs font-semibold uppercase tracking-wider transition-colors"
+                            className="flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-sm hover:bg-slate-50 text-xs font-bold uppercase tracking-wider transition-all shadow-sm active:scale-95"
                         >
-                            <FileText size={14} className="text-slate-500" />
-                            <span>Low Stock Report</span>
+                            <FileText size={14} className="text-slate-400" />
+                            <span>Audit Report</span>
                         </button>
                     )}
-                    <div className="h-9 px-3 bg-slate-50 border border-slate-200 flex items-center rounded-md text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Total SKU Counts: {inventory.length}
+                    <div className="h-9 px-4 bg-slate-900 flex items-center rounded-sm text-[10px] font-bold text-white uppercase tracking-widest border border-slate-900 shadow-lg shadow-slate-200">
+                        SKUs: {inventory.length}
                     </div>
                 </div>
             </div>
 
             {/* Main Tabs */}
-            <div className="flex flex-wrap items-center gap-2">
-                <div className="flex bg-slate-100 p-1 rounded-md">
+            <div className="flex flex-wrap items-center gap-4">
+                <div className="flex bg-slate-100 p-0.5 rounded-sm border border-slate-200">
                     <TabBtn active={selectedBrand === 'Apple'} onClick={() => { setSelectedBrand('Apple'); setSelectedSeries(null); }} label="Apple" />
                     <TabBtn active={selectedBrand === 'Samsung'} onClick={() => { setSelectedBrand('Samsung'); setSelectedSeries(null); }} label="Samsung" />
                 </div>
-                <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"></div>
-                <div className="flex bg-slate-100 p-1 rounded-md">
+                <div className="flex bg-slate-100 p-0.5 rounded-sm border border-slate-200">
                     <TabBtn active={selectedCategory === 'Screen'} onClick={() => { setSelectedCategory('Screen'); setSelectedSeries(null); }} label="Screens" />
                     <TabBtn active={selectedCategory === 'Battery'} onClick={() => { setSelectedCategory('Battery'); setSelectedSeries(null); }} label="Batteries" />
                 </div>
                 <button
                     onClick={() => setShowLowStockOnly(!showLowStockOnly)}
                     className={clsx(
-                        "ml-auto px-4 h-9 rounded-md text-[11px] font-bold uppercase tracking-widest transition-all flex items-center space-x-2 border",
-                        showLowStockOnly ? "bg-red-50 border-red-200 text-red-700" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                        "ml-auto px-4 h-9 rounded-sm text-[10px] font-black uppercase tracking-[0.15em] transition-all flex items-center space-x-2 border",
+                        showLowStockOnly ? "bg-red-600 border-red-600 text-white shadow-lg shadow-red-100" : "bg-white border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-900"
                     )}
                 >
                     <AlertTriangle size={14} />
-                    <span>View Low Stock Only</span>
+                    <span>Low Stock Only</span>
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                 {/* Series Navigation */}
                 <div className="lg:col-span-1 space-y-4">
-                    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-                        <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
-                            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center">
-                                <Filter size={12} className="mr-2" /> Model Categories
+                    <div className="bg-white border border-slate-200 rounded-sm overflow-hidden shadow-sm">
+                        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+                            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center">
+                                <Filter size={12} className="mr-2" /> Model Matrix
                             </h3>
                         </div>
-                        <div className="p-2 space-y-0.5">
+                        <div className="p-1.5 space-y-0.5">
                             <SeriesBtn
                                 active={selectedSeries === null}
                                 onClick={() => setSelectedSeries(null)}
-                                label="Full Inventory"
+                                label="View All Models"
                             />
                             {seriesList.map(series => (
                                 <SeriesBtn
@@ -273,59 +276,61 @@ const Inventory = () => {
                 </div>
 
                 {/* Content Area */}
-                <div className="lg:col-span-3 space-y-4">
-                    <div className="relative">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <div className="lg:col-span-3 space-y-6">
+                    <div className="relative group">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-slate-600 transition-colors" size={16} />
                         <input
                             type="text"
-                            placeholder="Find items by SKU or part name..."
-                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg h-10 text-sm focus:outline-none focus:border-slate-400 placeholder:text-slate-400"
+                            placeholder="FILTER BY SKU OR COMPONENT NAME..."
+                            className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-sm h-11 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-slate-400 focus:bg-slate-50/50 transition-all placeholder:text-slate-300 shadow-sm"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
 
-                    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                    <div className="bg-white border border-slate-200 rounded-sm overflow-hidden shadow-sm">
                         {filteredItems.length === 0 ? (
-                            <div className="py-20 text-center">
-                                <Package size={32} className="text-slate-200 mx-auto mb-3" />
-                                <p className="text-xs font-medium text-slate-400 uppercase tracking-widest border border-slate-100 inline-block px-4 py-2 rounded">No records found</p>
+                            <div className="py-24 text-center">
+                                <Package size={40} className="text-slate-100 mx-auto mb-4" strokeWidth={1} />
+                                <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] bg-slate-50 inline-block px-6 py-2 rounded-full border border-slate-100">No Inventory Records</p>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 divide-x divide-y divide-slate-100 bg-slate-100">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 divide-x divide-y divide-slate-100">
                                 {filteredItems.map(item => (
-                                    <div key={item._id} className="bg-white p-5 flex flex-col justify-between hover:bg-slate-50 transition-colors">
+                                    <div key={item._id} className="bg-white p-6 flex flex-col justify-between hover:bg-slate-50/50 transition-all group">
                                         <div>
-                                            <div className="flex items-start justify-between mb-3">
-                                                <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border border-slate-200">
+                                            <div className="flex items-start justify-between mb-4">
+                                                <span className="bg-slate-900 text-white px-2 py-0.5 rounded-sm text-[8px] font-black uppercase tracking-[0.1em] border border-slate-900 shadow-md shadow-slate-100">
                                                     {item.partId?.sku}
                                                 </span>
                                                 {item.quantity <= (item.partId?.reorder_threshold || 5) && (
-                                                    <AlertTriangle size={14} className="text-amber-500" />
+                                                    <div className="w-5 h-5 bg-red-50 rounded-full flex items-center justify-center animate-pulse">
+                                                        <AlertTriangle size={12} className="text-red-500" />
+                                                    </div>
                                                 )}
                                             </div>
-                                            <h4 className="text-sm font-semibold text-slate-800 line-clamp-2 min-h-[2.5rem] leading-tight mb-1">
+                                            <h4 className="text-xs font-bold text-slate-900 line-clamp-2 min-h-[3rem] leading-relaxed mb-1 uppercase tracking-tight">
                                                 {item.partId?.name}
                                             </h4>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{item.partId?.series}</p>
+                                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{item.partId?.series}</p>
                                         </div>
 
                                         <div className="mt-8 flex items-end justify-between">
                                             <div>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5 border-b border-slate-100 w-fit">In Stock</p>
-                                                <div className="flex items-center space-x-1.5">
+                                                <p className="text-[9px] text-slate-400 font-black uppercase tracking-[0.15em] mb-2 opacity-60">Stock Balance</p>
+                                                <div className="flex items-center space-x-2">
                                                     <span className={clsx(
-                                                        "text-xl font-bold tabular-nums",
-                                                        item.quantity === 0 ? "text-red-500" :
-                                                            item.quantity <= 5 ? "text-amber-500" : "text-slate-900"
+                                                        "text-2xl font-black tabular-nums tracking-tighter",
+                                                        item.quantity === 0 ? "text-red-600" :
+                                                            item.quantity <= 5 ? "text-amber-600" : "text-slate-900"
                                                     )}>
                                                         {item.quantity}
                                                     </span>
-                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter self-end mb-1">Items</span>
+                                                    <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest self-end mb-1">Units</span>
                                                 </div>
                                             </div>
 
-                                            <div className="flex space-x-1.5">
+                                            <div className="flex space-x-2">
                                                 <button
                                                     onClick={() => {
                                                         setSelectedItem(item);
@@ -333,7 +338,7 @@ const Inventory = () => {
                                                         fetchActiveJobs();
                                                         setShowUseModal(true);
                                                     }}
-                                                    className="p-2 text-slate-400 hover:text-slate-900 border border-slate-200 rounded hover:bg-white transition-all shadow-sm"
+                                                    className="p-2.5 text-slate-400 hover:text-blue-600 border border-slate-200 rounded-sm hover:bg-white transition-all shadow-sm active:scale-90"
                                                     title="Assign to Job"
                                                 >
                                                     <Wrench size={14} />
@@ -345,7 +350,7 @@ const Inventory = () => {
                                                             setQtyChange(0);
                                                             setShowModal(true);
                                                         }}
-                                                        className="p-2 text-slate-400 hover:text-slate-900 border border-slate-200 rounded hover:bg-white transition-all shadow-sm"
+                                                        className="p-2.5 text-slate-400 hover:text-slate-900 border border-slate-200 rounded-sm hover:bg-white transition-all shadow-sm active:scale-90"
                                                         title="Inventory Adjustment"
                                                     >
                                                         <Edit3 size={14} />
@@ -363,53 +368,68 @@ const Inventory = () => {
 
             {/* Simple Adjustment Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-sm border border-slate-200 overflow-hidden">
-                        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-                            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Inventory Adjustment</h2>
-                            <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-900 transition-colors">
-                                <X size={18} />
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
+                    <div className="bg-white rounded-sm shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)] w-full max-w-sm border border-slate-200 overflow-hidden transform animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 bg-slate-900 flex items-center justify-between">
+                            <h2 className="text-[10px] font-black text-white uppercase tracking-[0.2em] flex items-center">
+                                <Edit3 size={14} className="mr-3 text-slate-400" /> Stock Adjustment
+                            </h2>
+                            <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors p-1">
+                                <X size={20} />
                             </button>
                         </div>
 
-                        <div className="p-6 space-y-6">
-                            <div className="space-y-1">
-                                <h4 className="text-sm font-semibold text-slate-900">{selectedItem?.partId?.name}</h4>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border border-slate-100 px-2 py-0.5 rounded w-fit">{selectedItem?.partId?.sku}</p>
+                        <div className="p-8 space-y-8">
+                            <div>
+                                <h4 className="text-[13px] font-black text-slate-900 uppercase tracking-tight leading-tight mb-2">{selectedItem?.partId?.name}</h4>
+                                <div className="flex items-center space-x-3">
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-0.5 rounded-sm border border-slate-100">{selectedItem?.partId?.sku}</span>
+                                    <div className="w-1 h-1 bg-slate-200 rounded-full"></div>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{selectedItem?.partId?.series}</span>
+                                </div>
                             </div>
 
-                            <form onSubmit={handleSubmitAdjustment} className="space-y-6">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="bg-slate-50 border border-slate-100 rounded p-3">
-                                        <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Available</label>
-                                        <p className="text-lg font-bold text-slate-900">{selectedItem?.quantity}</p>
+                            <form onSubmit={handleSubmitAdjustment} className="space-y-8">
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="bg-slate-50/50 border border-slate-100 rounded-sm p-4 relative overflow-hidden group">
+                                        <label className="block text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Available Balance</label>
+                                        <p className="text-2xl font-black text-slate-900 tracking-tighter tabular-nums">{selectedItem?.quantity}</p>
+                                        <div className="absolute right-0 bottom-0 opacity-5 -mb-2 -mr-2 text-slate-900 transform rotate-12">
+                                            <Package size={64} />
+                                        </div>
                                     </div>
-                                    <div className="bg-slate-50 border border-slate-100 rounded p-3">
-                                        <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Adjustment</label>
+                                    <div className="bg-white border-2 border-slate-900 rounded-sm p-4 shadow-[4px_4px_0_0_rgba(15,23,42,0.1)]">
+                                        <label className="block text-[8px] font-black text-slate-900 uppercase tracking-[0.2em] mb-2">Stock Delta</label>
                                         <input
                                             type="number"
-                                            className="w-full bg-transparent border-none p-0 text-lg font-bold text-slate-900 focus:ring-0"
+                                            className="w-full bg-transparent border-none p-0 text-2xl font-black text-slate-900 focus:ring-0 tabular-nums tracking-tighter outline-none"
                                             value={qtyChange}
                                             onChange={(e) => setQtyChange(e.target.value)}
                                             required
+                                            autoFocus
                                         />
                                     </div>
                                 </div>
 
-                                <div className="flex space-x-3 pt-2">
+                                <div className="flex items-center space-x-2 text-[9px] font-bold py-3 px-4 bg-blue-50 text-blue-700 border border-blue-100 rounded-sm uppercase tracking-widest">
+                                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse mr-2"></div>
+                                    New Projected Stock: {Number(selectedItem?.quantity) + Number(qtyChange)}
+                                </div>
+
+                                <div className="flex space-x-4">
                                     <button
                                         type="button"
                                         onClick={() => setShowModal(false)}
-                                        className="flex-1 px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-widest border border-slate-200 rounded hover:bg-slate-50 transition-colors"
+                                        className="flex-1 px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-slate-900 transition-all border border-transparent"
                                     >
-                                        Abort
+                                        Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={submitting || qtyChange == 0}
-                                        className="flex-1 px-4 py-2 bg-slate-900 text-white text-xs font-bold uppercase tracking-widest rounded hover:bg-slate-800 disabled:opacity-50 transition-colors"
+                                        className="flex-[1.5] px-6 py-3 bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-800 disabled:opacity-20 transition-all shadow-xl shadow-slate-200 active:scale-95"
                                     >
-                                        {submitting ? 'Updating...' : 'Save Changes'}
+                                        {submitting ? 'COMMITTING...' : 'COMMIT CHANGES'}
                                     </button>
                                 </div>
                             </form>
@@ -417,7 +437,6 @@ const Inventory = () => {
                     </div>
                 </div>
             )}
-
             {/* Assignment Modal */}
             {showUseModal && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -499,68 +518,71 @@ const Inventory = () => {
                         </div>
                     </div>
                 </div>
-            )}
+            )
+            }
 
             {/* Low Stock Filter Modal */}
-            {showReportModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowReportModal(false)}></div>
-                    <div className="relative bg-white rounded-lg w-full max-w-sm border border-slate-200 shadow-xl overflow-hidden">
-                        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-                            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Report Configuration</h2>
-                            <button onClick={() => setShowReportModal(false)} className="text-slate-400 hover:text-slate-900 transition-colors">
-                                <X size={18} />
-                            </button>
-                        </div>
-
-                        <div className="p-6 space-y-5">
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Stock Threshold</label>
-                                    <div className="flex items-center space-x-3">
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            max="1000"
-                                            value={reportThreshold}
-                                            onChange={(e) => setReportThreshold(Number(e.target.value))}
-                                            className="w-24 bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-slate-400"
-                                        />
-                                        <span className="text-xs font-medium text-slate-400">Units or less</span>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Select Export Format</label>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <button
-                                            onClick={generatePDF}
-                                            className="flex items-center justify-center space-x-3 p-3 border border-slate-200 rounded hover:bg-slate-50 transition-all text-slate-700"
-                                        >
-                                            <FileText size={16} className="text-slate-400" />
-                                            <span className="text-[11px] font-bold uppercase tracking-wider">PDF Document</span>
-                                        </button>
-                                        <button
-                                            onClick={generateExcel}
-                                            className="flex items-center justify-center space-x-3 p-3 border border-slate-200 rounded hover:bg-slate-50 transition-all text-slate-700"
-                                        >
-                                            <Download size={16} className="text-slate-400" />
-                                            <span className="text-[11px] font-bold uppercase tracking-wider">Excel Sheet</span>
-                                        </button>
-                                    </div>
-                                </div>
+            {
+                showReportModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowReportModal(false)}></div>
+                        <div className="relative bg-white rounded-lg w-full max-w-sm border border-slate-200 shadow-xl overflow-hidden">
+                            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+                                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Report Configuration</h2>
+                                <button onClick={() => setShowReportModal(false)} className="text-slate-400 hover:text-slate-900 transition-colors">
+                                    <X size={18} />
+                                </button>
                             </div>
 
-                            <div className="pt-2 border-t border-slate-50">
-                                <p className="text-[10px] text-slate-400 text-center leading-relaxed font-medium">
-                                    This report will include all inventory items with a current balance of {reportThreshold} {reportThreshold === 1 ? 'unit' : 'units'} or less.
-                                </p>
+                            <div className="p-6 space-y-5">
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Stock Threshold</label>
+                                        <div className="flex items-center space-x-3">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="1000"
+                                                value={reportThreshold}
+                                                onChange={(e) => setReportThreshold(Number(e.target.value))}
+                                                className="w-24 bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-slate-400"
+                                            />
+                                            <span className="text-xs font-medium text-slate-400">Units or less</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Select Export Format</label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button
+                                                onClick={generatePDF}
+                                                className="flex items-center justify-center space-x-3 p-3 border border-slate-200 rounded hover:bg-slate-50 transition-all text-slate-700"
+                                            >
+                                                <FileText size={16} className="text-slate-400" />
+                                                <span className="text-[11px] font-bold uppercase tracking-wider">PDF Document</span>
+                                            </button>
+                                            <button
+                                                onClick={generateExcel}
+                                                className="flex items-center justify-center space-x-3 p-3 border border-slate-200 rounded hover:bg-slate-50 transition-all text-slate-700"
+                                            >
+                                                <Download size={16} className="text-slate-400" />
+                                                <span className="text-[11px] font-bold uppercase tracking-wider">Excel Sheet</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-slate-50">
+                                    <p className="text-[10px] text-slate-400 text-center leading-relaxed font-medium">
+                                        This report will include all inventory items with a current balance of {reportThreshold} {reportThreshold === 1 ? 'unit' : 'units'} or less.
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 

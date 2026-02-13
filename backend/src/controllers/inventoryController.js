@@ -101,24 +101,28 @@ const adjustInventory = asyncHandler(async (req, res) => {
 
     if (req.params.id) {
         inventory = await Inventory.findById(req.params.id);
-        if (inventory) effectivePartId = inventory.partId;
+        if (inventory) {
+            effectivePartId = inventory.partId;
+        }
     } else if (partId) {
         inventory = await Inventory.findOne({ partId, storeId });
     }
 
+    const effectiveStoreId = inventory ? inventory.storeId : storeId;
+
     if (!inventory) {
         // If adding stock to new item in store, create inventory record
-        if (qtyChange > 0 && effectivePartId) {
+        if (qtyChange > 0 && effectivePartId && effectiveStoreId) {
              const newInv = await Inventory.create({
                 partId: effectivePartId,
-                storeId,
+                storeId: effectiveStoreId,
                 quantity: qtyChange,
                 locationId: null 
              });
              
              await Transaction.create({
                 partId: effectivePartId,
-                storeId,
+                storeId: effectiveStoreId,
                 inventoryId: newInv._id,
                 type: 'adjustment',
                 qtyChange,
@@ -149,7 +153,7 @@ const adjustInventory = asyncHandler(async (req, res) => {
 
     await Transaction.create({
         partId: effectivePartId,
-        storeId,
+        storeId: effectiveStoreId,
         inventoryId: inventory._id,
         type: 'adjustment',
         qtyChange,
@@ -160,7 +164,7 @@ const adjustInventory = asyncHandler(async (req, res) => {
         note
     });
 
-    await checkLowStock(effectivePartId, storeId);
+    await checkLowStock(effectivePartId, effectiveStoreId);
 
     res.json(inventory);
 });
