@@ -24,7 +24,9 @@ import CustomerDetails from './pages/CustomerDetails';
 import Suppliers from './pages/Suppliers';
 import UseParts from './pages/UseParts';
 import UsageLogs from './pages/UsageLogs';
+import AdminSettings from './pages/AdminSettings';
 import AdminLayout from './components/AdminLayout';
+import { SiteSettingsProvider } from './context/SiteSettingsContext';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
@@ -50,56 +52,61 @@ const App = () => {
   return (
     <Router>
       <AuthProvider>
-        <ToastContainer theme="colored" position="bottom-right" />
-        <Routes>
-          <Route path="/login" element={<Login />} />
+        <SiteSettingsProvider>
+          <ToastContainer theme="colored" position="bottom-right" />
+          <Routes>
+            <Route path="/login" element={<Login />} />
 
-          <Route path="/" element={
-            <ProtectedRoute>
-              <AdminLayout />
-            </ProtectedRoute>
-          }>
-            <Route index element={<Dashboard />} />
+            <Route path="/" element={
+              <ProtectedRoute>
+                <AdminLayout />
+              </ProtectedRoute>
+            }>
+              <Route index element={<Dashboard />} />
 
-            {/* Technician Accessible Routes */}
-            <Route path="jobs" element={<Jobs />} />
-            <Route path="jobs/new" element={<CreateJob />} />
-            <Route path="jobs/:id" element={<JobDetails />} />
-            <Route path="use-parts" element={<UseParts />} />
-            <Route path="usage-logs" element={<UsageLogs />} />
-            <Route path="inventory" element={<Inventory />} />
-            <Route path="parts" element={<PartsCatalog />} />
-            <Route path="invoices" element={<Invoices />} />
-            <Route path="invoices/:id" element={<InvoiceDetails />} />
-            <Route path="customers" element={<Customers />} />
-            <Route path="customers/:id" element={<CustomerDetails />} />
-            <Route path="suppliers" element={<Suppliers />} />
+              {/* Technician Accessible Routes */}
+              <Route path="jobs" element={<Jobs />} />
+              <Route path="jobs/new" element={<CreateJob />} />
+              <Route path="jobs/:id" element={<JobDetails />} />
+              <Route path="use-parts" element={<UseParts />} />
+              <Route path="usage-logs" element={<UsageLogs />} />
+              <Route path="inventory" element={<Inventory />} />
+              <Route path="parts" element={<PartsCatalog />} />
+              <Route path="invoices" element={<Invoices />} />
+              <Route path="invoices/:id" element={<InvoiceDetails />} />
+              <Route path="customers" element={<Customers />} />
+              <Route path="customers/:id" element={<CustomerDetails />} />
+              <Route path="suppliers" element={<Suppliers />} />
 
-            {/* Admin/Manager Only Routes */}
-            <Route path="pos" element={
-              <ProtectedRoute allowedRoles={['admin', 'manager']}><PurchaseOrders /></ProtectedRoute>
-            } />
-            <Route path="pos/new" element={
-              <ProtectedRoute allowedRoles={['admin', 'manager']}><CreatePO /></ProtectedRoute>
-            } />
-            <Route path="pos/:id" element={
-              <ProtectedRoute allowedRoles={['admin', 'manager']}><PurchaseOrderDetails /></ProtectedRoute>
-            } />
-            <Route path="reports" element={
-              <ProtectedRoute allowedRoles={['admin', 'manager']}><Reports /></ProtectedRoute>
-            } />
+              {/* Admin/Manager Only Routes */}
+              <Route path="pos" element={
+                <ProtectedRoute allowedRoles={['admin', 'manager']}><PurchaseOrders /></ProtectedRoute>
+              } />
+              <Route path="pos/new" element={
+                <ProtectedRoute allowedRoles={['admin', 'manager']}><CreatePO /></ProtectedRoute>
+              } />
+              <Route path="pos/:id" element={
+                <ProtectedRoute allowedRoles={['admin', 'manager']}><PurchaseOrderDetails /></ProtectedRoute>
+              } />
+              <Route path="reports" element={
+                <ProtectedRoute allowedRoles={['admin', 'manager']}><Reports /></ProtectedRoute>
+              } />
 
-            {/* Admin Only Routes */}
-            <Route path="users" element={
-              <ProtectedRoute allowedRoles={['admin']}><Users /></ProtectedRoute>
-            } />
-            <Route path="audit-logs" element={
-              <ProtectedRoute allowedRoles={['admin']}><AuditLogs /></ProtectedRoute>
-            } />
-          </Route>
+              {/* Admin Only Routes */}
+              <Route path="users" element={
+                <ProtectedRoute allowedRoles={['admin']}><Users /></ProtectedRoute>
+              } />
+              <Route path="audit-logs" element={
+                <ProtectedRoute allowedRoles={['admin']}><AuditLogs /></ProtectedRoute>
+              } />
+              <Route path="settings" element={
+                <ProtectedRoute allowedRoles={['admin']}><AdminSettings /></ProtectedRoute>
+              } />
+            </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </SiteSettingsProvider>
       </AuthProvider>
     </Router>
   );

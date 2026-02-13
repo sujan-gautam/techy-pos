@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import api from '../api/axios';
 import { Link } from 'react-router-dom';
 import { Plus, Search, Filter, Clock, CheckCircle2, AlertCircle, Wrench, Package } from 'lucide-react';
+import TableSkeleton from '../components/skeletons/TableSkeleton';
 
 const Jobs = () => {
     const [jobs, setJobs] = useState([]);
@@ -50,11 +51,15 @@ const Jobs = () => {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center py-20">
-                <div className="text-center">
-                    <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-gray-500 text-sm">Loading repair jobs...</p>
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="h-8 w-32 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-4 w-64 bg-gray-100 rounded animate-pulse mt-2"></div>
+                    </div>
+                    <div className="h-10 w-28 bg-blue-100 rounded animate-pulse"></div>
                 </div>
+                <TableSkeleton rows={10} columns={6} />
             </div>
         );
     }

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { Link } from 'react-router-dom';
 import { Plus, ShoppingCart, ChevronRight, Clock, Package } from 'lucide-react';
+import TableSkeleton from '../components/skeletons/TableSkeleton';
 
 const PurchaseOrders = () => {
     const [pos, setPos] = useState([]);
@@ -22,8 +23,15 @@ const PurchaseOrders = () => {
     }, []);
 
     if (loading) return (
-        <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <div>
+                    <div className="h-8 w-40 bg-gray-200 rounded animate-pulse"></div>
+                    <div className="h-4 w-80 bg-gray-100 rounded animate-pulse mt-2"></div>
+                </div>
+                <div className="h-10 w-36 bg-blue-100 rounded animate-pulse"></div>
+            </div>
+            <TableSkeleton rows={8} columns={6} />
         </div>
     );
 

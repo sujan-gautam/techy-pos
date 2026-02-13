@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api/axios';
 import { Plus, Search, X, Edit2, Package, Layers, Settings, ChevronRight } from 'lucide-react';
 import { toast } from 'react-toastify';
+import TableSkeleton from '../components/skeletons/TableSkeleton';
 
 const PartsCatalog = () => {
     const [parts, setParts] = useState([]);
@@ -95,8 +96,20 @@ const PartsCatalog = () => {
 
     if (loading && parts.length === 0) {
         return (
-            <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="h-8 w-32 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-4 w-80 bg-gray-100 rounded animate-pulse mt-2"></div>
+                    </div>
+                    <div className="h-10 w-32 bg-blue-100 rounded animate-pulse"></div>
+                </div>
+                <div className="flex gap-6">
+                    <div className="w-64 h-96 bg-white border border-gray-200 rounded-lg animate-pulse"></div>
+                    <div className="flex-1">
+                        <TableSkeleton rows={8} columns={4} />
+                    </div>
+                </div>
             </div>
         );
     }

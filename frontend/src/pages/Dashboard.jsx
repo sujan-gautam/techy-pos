@@ -5,6 +5,7 @@ import socket from '../api/socket';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { DollarSign, Wrench, Clock, AlertTriangle, TrendingUp, Package, Users, ChevronRight, Activity, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import CardSkeleton from '../components/skeletons/CardSkeleton';
 
 const Dashboard = () => {
     const [stats, setStats] = useState(null);
@@ -35,8 +36,16 @@ const Dashboard = () => {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="space-y-6">
+                <div>
+                    <div className="h-8 w-32 bg-gray-200 rounded animate-pulse mb-2"></div>
+                    <div className="h-4 w-64 bg-gray-100 rounded animate-pulse"></div>
+                </div>
+                <CardSkeleton count={4} />
+                <div className="grid grid-cols-2 gap-6">
+                    <div className="h-80 bg-white border border-gray-200 rounded-lg animate-pulse"></div>
+                    <div className="h-80 bg-white border border-gray-200 rounded-lg animate-pulse"></div>
+                </div>
             </div>
         );
     }

@@ -11,6 +11,7 @@ import clsx from 'clsx';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import CardSkeleton from '../components/skeletons/CardSkeleton';
 
 const Reports = () => {
     const [activeTab, setActiveTab] = useState('summary');

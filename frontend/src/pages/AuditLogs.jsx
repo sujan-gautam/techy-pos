@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../api/axios';
 import { toast } from 'react-toastify';
 import { RefreshCw, History, User, Clock } from 'lucide-react';
+import TableSkeleton from '../components/skeletons/TableSkeleton';
 
 const AuditLogs = () => {
     const [transactions, setTransactions] = useState([]);
@@ -31,8 +32,15 @@ const AuditLogs = () => {
 
     if (loading && page === 1) {
         return (
-            <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="h-8 w-32 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-4 w-64 bg-gray-100 rounded animate-pulse mt-2"></div>
+                    </div>
+                    <div className="h-10 w-28 bg-gray-100 rounded animate-pulse"></div>
+                </div>
+                <TableSkeleton rows={10} columns={6} />
             </div>
         );
     }

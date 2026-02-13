@@ -6,6 +6,7 @@ import {
     ChevronDown, Download, AlertCircle, Clock, Smartphone
 } from 'lucide-react';
 import { format, isToday, isYesterday, startOfDay } from 'date-fns';
+import ListSkeleton from '../components/skeletons/ListSkeleton';
 
 const UsageLogs = () => {
     const [transactions, setTransactions] = useState([]);
@@ -17,13 +18,11 @@ const UsageLogs = () => {
     const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [selectedUser, setSelectedUser] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
-    const [showAll, setShowAll] = useState(true); // Default to seeing everything
+    const [showAll, setShowAll] = useState(true);
 
     const fetchData = async () => {
         setLoading(true);
         try {
-            // Type filter: if not showing all, only fetch usage-related types
-            // But actually fetching all and filtering in FE is more flexible for "usage vs all" toggle.
             const { data } = await api.get('/transactions', {
                 params: {
                     startDate,
@@ -50,13 +49,11 @@ const UsageLogs = () => {
 
     const filteredLogs = useMemo(() => {
         return transactions.filter(tx => {
-            // Filter criteria
             const isJobUse = tx.type === 'job_use';
             const isReturn = tx.type === 'job_return';
             const isNegativeAdj = tx.type === 'adjustment' && tx.qtyChange < 0;
             const isUsage = isJobUse || isReturn || isNegativeAdj;
 
-            // If not showAll, only return usage items
             if (!showAll && !isUsage) return false;
 
             if (searchTerm) {
@@ -75,7 +72,9 @@ const UsageLogs = () => {
     const groupedLogs = useMemo(() => {
         const groups = {};
         filteredLogs.forEach(tx => {
-            const dateStr = format(new Date(tx.timestamp), 'yyyy-MM-dd');
+            // Use local date for grouping
+            const date = new Date(tx.timestamp);
+            const dateStr = format(date, 'yyyy-MM-dd');
             if (!groups[dateStr]) groups[dateStr] = [];
             groups[dateStr].push(tx);
         });
@@ -88,175 +87,194 @@ const UsageLogs = () => {
 
     if (loading && transactions.length === 0) {
         return (
-            <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="h-8 w-40 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-4 w-64 bg-gray-100 rounded animate-pulse mt-2"></div>
+                    </div>
+                </div>
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <div className="grid grid-cols-4 gap-4">
+                        {[1, 2, 3, 4].map(i => (
+                            <div key={i} className="h-10 bg-gray-100 rounded animate-pulse"></div>
+                        ))}
+                    </div>
+                </div>
+                <ListSkeleton items={6} />
             </div>
         );
     }
 
     return (
-        <div className="space-y-6 max-w-6xl mx-auto">
+        <div className="space-y-6">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-xl font-bold text-gray-900">Material Usage History</h1>
-                    <p className="text-gray-500 text-sm mt-0.5">Track and audit part consumption across all jobs</p>
+                    <h1 className="text-2xl font-bold text-gray-900">Usage History</h1>
+                    <p className="text-gray-500 text-sm mt-1">Track inventory changes and part consumption</p>
                 </div>
-                <div className="flex items-center space-x-4">
-                    <div className="flex items-center bg-gray-100 p-1 rounded-lg">
+                <div className="flex items-center space-x-3">
+                    <div className="flex items-center bg-gray-100 p-1 rounded-md">
                         <button
                             onClick={() => setShowAll(true)}
-                            className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${showAll ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${showAll ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                         >
-                            All Activity
+                            All
                         </button>
                         <button
                             onClick={() => setShowAll(false)}
-                            className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${!showAll ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${!showAll ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                         >
-                            Usage Only
+                            Usage only
                         </button>
                     </div>
-                    <div className="h-8 w-px bg-gray-200"></div>
                     <button
                         onClick={() => window.print()}
-                        className="p-2.5 text-gray-400 hover:text-gray-600 bg-white border border-gray-200 rounded-lg transition-all shadow-sm"
-                        title="Print Report"
+                        className="inline-flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        title="Export"
                     >
-                        <Download size={18} />
+                        <Download size={16} />
+                        <span>Export</span>
                     </button>
                 </div>
             </div>
 
-            {/* Global Filters */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+            {/* Filters */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">From Date</label>
-                        <div className="relative">
-                            <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input
-                                type="date"
-                                className="w-full bg-gray-50 border border-transparent focus:bg-white focus:border-blue-500 rounded-lg pl-9 pr-3 py-2 text-xs font-semibold transition-all outline-none"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                            />
-                        </div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">From</label>
+                        <input
+                            type="date"
+                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                        />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">To Date</label>
-                        <div className="relative">
-                            <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input
-                                type="date"
-                                className="w-full bg-gray-50 border border-transparent focus:bg-white focus:border-blue-500 rounded-lg pl-9 pr-3 py-2 text-xs font-semibold transition-all outline-none"
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                            />
-                        </div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">To</label>
+                        <input
+                            type="date"
+                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                        />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Technician</label>
-                        <div className="relative">
-                            <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <select
-                                className="w-full bg-gray-50 border border-transparent focus:bg-white focus:border-blue-500 rounded-lg pl-9 pr-3 py-2 text-xs font-semibold transition-all outline-none appearance-none"
-                                value={selectedUser}
-                                onChange={(e) => setSelectedUser(e.target.value)}
-                            >
-                                <option value="">All Staff</option>
-                                {users.filter(u => u.role === 'technician' || u.role === 'admin' || u.role === 'manager').map(u => (
-                                    <option key={u._id} value={u._id}>{u.name}</option>
-                                ))}
-                            </select>
-                        </div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Staff member</label>
+                        <select
+                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            value={selectedUser}
+                            onChange={(e) => setSelectedUser(e.target.value)}
+                        >
+                            <option value="">All staff</option>
+                            {users.filter(u => u.role === 'technician' || u.role === 'admin' || u.role === 'manager').map(u => (
+                                <option key={u._id} value={u._id}>{u.name}</option>
+                            ))}
+                        </select>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Search Items</label>
-                        <div className="relative">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Filter by SKU or Part..."
-                                className="w-full bg-gray-50 border border-transparent focus:bg-white focus:border-blue-500 rounded-lg pl-9 pr-3 py-2 text-xs font-semibold transition-all outline-none"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Search</label>
+                        <input
+                            type="text"
+                            placeholder="Part name or SKU..."
+                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
                     </div>
                 </div>
             </div>
 
             {/* Logs Timeline */}
-            <div className="space-y-8">
+            <div className="space-y-6">
                 {groupedLogs.length === 0 ? (
-                    <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-20 text-center">
-                        <Package size={48} className="mx-auto text-gray-100 mb-4" />
-                        <p className="text-gray-400 font-medium">No usage records found for selected filters.</p>
+                    <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+                        <Package size={40} className="mx-auto text-gray-300 mb-3" />
+                        <p className="text-sm text-gray-500">No records found</p>
                     </div>
                 ) : (
                     groupedLogs.map(group => (
-                        <div key={group.date} className="space-y-4">
-                            <div className="flex items-center space-x-4">
-                                <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full border ${isToday(new Date(group.date)) ? 'bg-blue-600 text-white border-blue-600' :
-                                    isYesterday(new Date(group.date)) ? 'bg-gray-800 text-white border-gray-800' :
-                                        'bg-white text-gray-500 border-gray-200'
-                                    }`}>
-                                    {isToday(new Date(group.date)) ? 'Today' :
-                                        isYesterday(new Date(group.date)) ? 'Yesterday' :
-                                            format(new Date(group.date), 'EEEE, MMM do')}
+                        <div key={group.date} className="space-y-3">
+                            <div className="flex items-center space-x-3">
+                                <span className="text-xs font-semibold text-gray-700">
+                                    {isToday(new Date(group.date + 'T00:00:00')) ? 'Today' :
+                                        isYesterday(new Date(group.date + 'T00:00:00')) ? 'Yesterday' :
+                                            format(new Date(group.date + 'T00:00:00'), 'EEEE, MMM d')}
                                 </span>
-                                <div className="flex-1 h-px bg-gray-100"></div>
-                                <span className="text-[10px] font-bold text-gray-400 uppercase">{group.items.length} materials logged</span>
+                                <div className="flex-1 h-px bg-gray-200"></div>
+                                <span className="text-xs text-gray-500">{group.items.length} {group.items.length === 1 ? 'transaction' : 'transactions'}</span>
                             </div>
 
-                            <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-50 overflow-hidden shadow-sm">
+                            <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100 overflow-hidden shadow-sm">
                                 {group.items.map(tx => (
-                                    <div key={tx._id} className="p-4 hover:bg-gray-50/50 transition-colors flex items-center justify-between group">
-                                        <div className="flex items-center space-x-4">
-                                            <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center text-blue-600 border border-gray-100 font-bold group-hover:scale-110 transition-transform">
-                                                {tx.qtyChange > 0 ? `+${tx.qtyChange}` : tx.qtyChange}
-                                            </div>
-                                            <div>
-                                                <div className="flex items-center space-x-2">
-                                                    <span className="text-sm font-bold text-gray-900">{tx.partId?.name}</span>
-                                                    <span className="text-[10px] font-bold text-gray-400 font-mono uppercase tracking-tighter">[{tx.partId?.sku}]</span>
+                                    <div key={tx._id} className="p-5 hover:bg-gray-50 transition-colors">
+                                        <div className="flex items-start justify-between">
+                                            <div className="flex items-start space-x-4 flex-1">
+                                                <div className={`w-12 h-12 rounded flex items-center justify-center text-sm font-bold flex-shrink-0 ${tx.qtyChange > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+                                                    }`}>
+                                                    {tx.qtyChange > 0 ? `+${tx.qtyChange}` : tx.qtyChange}
                                                 </div>
-                                                <div className="flex items-center space-x-3 mt-1">
-                                                    <div className="flex items-center text-[10px] text-gray-500 font-medium">
-                                                        <User size={10} className="mr-1" />
-                                                        {tx.performedBy?.name}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center space-x-2 mb-2">
+                                                        <h3 className="text-sm font-semibold text-gray-900">{tx.partId?.name}</h3>
+                                                        <span className="text-xs text-gray-400 font-mono">{tx.partId?.sku}</span>
                                                     </div>
-                                                    <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
-                                                    <div className="flex items-center text-[10px] text-gray-500 font-medium">
-                                                        <Clock size={10} className="mr-1" />
-                                                        {format(new Date(tx.timestamp), 'hh:mm aa')}
-                                                    </div>
-                                                    {tx.referenceId && (
-                                                        <>
-                                                            <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
-                                                            <div className="flex items-center text-[10px] text-blue-600 font-bold">
-                                                                <Smartphone size={10} className="mr-1" />
-                                                                #{tx.referenceId.jobId || 'Job'}
+
+                                                    <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+                                                        <div className="flex items-center space-x-2">
+                                                            <span className="text-gray-500 font-medium">Performed by:</span>
+                                                            <span className="text-gray-900 font-semibold">{tx.performedBy?.name || 'Unknown'}</span>
+                                                        </div>
+                                                        <div className="flex items-center space-x-2">
+                                                            <span className="text-gray-500 font-medium">Time:</span>
+                                                            <span className="text-gray-900">{format(new Date(tx.timestamp), 'MMM d, yyyy h:mm a')}</span>
+                                                        </div>
+
+                                                        <div className="flex items-center space-x-2">
+                                                            <span className="text-gray-500 font-medium">Previous stock:</span>
+                                                            <span className="text-gray-900">{tx.prevQty !== undefined ? tx.prevQty : 'N/A'}</span>
+                                                        </div>
+                                                        <div className="flex items-center space-x-2">
+                                                            <span className="text-gray-500 font-medium">New stock:</span>
+                                                            <span className="text-gray-900 font-semibold">{tx.newQty !== undefined ? tx.newQty : 'N/A'}</span>
+                                                        </div>
+
+                                                        {tx.referenceId && (
+                                                            <div className="flex items-center space-x-2">
+                                                                <span className="text-gray-500 font-medium">Job reference:</span>
+                                                                <span className="text-blue-600 font-semibold">#{tx.referenceId.jobId || 'N/A'}</span>
                                                             </div>
-                                                        </>
+                                                        )}
+
+                                                        {tx.reason && (
+                                                            <div className="flex items-center space-x-2">
+                                                                <span className="text-gray-500 font-medium">Reason:</span>
+                                                                <span className="text-gray-900">{tx.reason.replace(/_/g, ' ')}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {tx.note && (
+                                                        <div className="mt-2 pt-2 border-t border-gray-100">
+                                                            <p className="text-xs text-gray-600">
+                                                                <span className="font-medium text-gray-500">Note: </span>
+                                                                {tx.note}
+                                                            </p>
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-tight ${tx.type === 'job_use' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                                                tx.type === 'job_return' ? 'bg-red-50 text-red-600 border-red-100' :
-                                                    tx.qtyChange > 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                                        'bg-purple-50 text-purple-600 border-purple-100'
+                                            <div className={`text-xs font-medium px-2.5 py-1 rounded flex-shrink-0 ml-4 ${tx.type === 'job_use' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                                tx.type === 'job_return' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
+                                                    tx.qtyChange > 0 ? 'bg-green-50 text-green-700 border border-green-200' :
+                                                        'bg-gray-50 text-gray-700 border border-gray-200'
                                                 }`}>
-                                                {tx.type === 'job_use' ? 'Job Use' :
-                                                    tx.type === 'job_return' ? 'Job Return' :
-                                                        tx.qtyChange > 0 ? 'Stock Intake' :
-                                                            'Adjustment'}
+                                                {tx.type === 'job_use' ? 'Used' :
+                                                    tx.type === 'job_return' ? 'Returned' :
+                                                        tx.qtyChange > 0 ? 'Added' : 'Removed'}
                                             </div>
-                                            {tx.note && <div className="text-[10px] text-gray-400 italic mt-1 max-w-[200px] truncate">{tx.note}</div>}
-                                            {tx.reason && tx.reason !== tx.type && <div className="text-[10px] text-gray-300 uppercase font-bold mt-0.5 tracking-tighter">{tx.reason.replace('_', ' ')}</div>}
                                         </div>
                                     </div>
                                 ))}

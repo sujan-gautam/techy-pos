@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../api/axios';
 import { toast } from 'react-toastify';
 import { Users, Search, Phone, Mail, ChevronRight, User } from 'lucide-react';
+import TableSkeleton from '../components/skeletons/TableSkeleton';
 
 const Customers = () => {
     const [customers, setCustomers] = useState([]);
@@ -35,8 +36,15 @@ const Customers = () => {
 
     if (loading && page === 1) {
         return (
-            <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="h-8 w-32 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-4 w-64 bg-gray-100 rounded animate-pulse mt-2"></div>
+                    </div>
+                    <div className="h-10 w-72 bg-gray-100 rounded animate-pulse"></div>
+                </div>
+                <TableSkeleton rows={8} columns={5} />
             </div>
         );
     }

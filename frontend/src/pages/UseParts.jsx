@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
+import ListSkeleton from '../components/skeletons/ListSkeleton';
 
 const UseParts = () => {
     const { user: currentUser } = useAuth();
@@ -122,8 +123,21 @@ const UseParts = () => {
 
     if (fetchingInitial) {
         return (
-            <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="h-8 w-40 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-4 w-80 bg-gray-100 rounded animate-pulse mt-2"></div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-3 gap-6">
+                    <div className="space-y-4">
+                        <div className="h-64 bg-white border border-gray-200 rounded-lg animate-pulse"></div>
+                    </div>
+                    <div className="col-span-2">
+                        <ListSkeleton items={5} />
+                    </div>
+                </div>
             </div>
         );
     }
@@ -260,63 +274,64 @@ const UseParts = () => {
                             ))}
 
                             {selectedPart && (
-                                <div className="bg-white border border-gray-200 rounded-xl p-8 space-y-6 shadow-sm animate-in fade-in zoom-in duration-200 relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 p-4">
-                                        <button onClick={() => setSelectedPart(null)} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all">
+                                <div className="bg-white border border-gray-300 rounded p-5 space-y-5">
+                                    <div className="flex items-start justify-between pb-4 border-b border-gray-200">
+                                        <div>
+                                            <h3 className="text-base font-semibold text-gray-900">{selectedPart.partId?.name}</h3>
+                                            <div className="mt-1 space-y-0.5">
+                                                <p className="text-xs text-gray-500">SKU: {selectedPart.partId?.sku}</p>
+                                                <p className="text-xs text-gray-500">Stock available: {selectedPart.quantity} units</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedPart(null)}
+                                            className="text-gray-400 hover:text-gray-600"
+                                        >
                                             <X size={18} />
                                         </button>
                                     </div>
 
-                                    <div className="flex items-center space-x-5">
-                                        <div className="w-14 h-14 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-blue-100">
-                                            <Package size={28} />
-                                        </div>
-                                        <div>
-                                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-widest border border-blue-100">Component Selection</span>
-                                            <h4 className="text-lg font-bold text-gray-900 mt-1">{selectedPart.partId?.name}</h4>
-                                            <div className="flex items-center space-x-2 mt-1">
-                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">SKU: {selectedPart.partId?.sku}</span>
-                                                <span className="text-gray-300">•</span>
-                                                <span className="text-[10px] font-bold text-emerald-600 uppercase">Available: {selectedPart.quantity}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <form onSubmit={handleUsePart} className="pt-2 space-y-6">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <form onSubmit={handleUsePart} className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 ml-1">Usage Quantity</label>
-                                                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl p-1.5 focus-within:ring-2 focus-within:ring-blue-500/10 focus-within:border-blue-500 transition-all">
+                                                <label className="block text-xs font-medium text-gray-700 mb-1.5">Quantity</label>
+                                                <div className="flex items-center border border-gray-300 rounded">
                                                     <button
                                                         type="button"
-                                                        onClick={() => setQty(prev => Math.max(selectedPart.quantity > 0 ? 1 : 0, Number(prev) - 1))}
-                                                        disabled={qty <= (selectedPart.quantity > 0 ? 1 : 0)}
-                                                        className="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-100 text-gray-600 font-bold hover:bg-gray-50 transition-all shadow-sm active:scale-95 disabled:opacity-30 disabled:scale-100"
-                                                    >-</button>
+                                                        onClick={() => setQty(prev => Math.max(1, Number(prev) - 1))}
+                                                        disabled={qty <= 1}
+                                                        className="px-3 py-2 border-r border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                    >
+                                                        −
+                                                    </button>
                                                     <input
                                                         type="number"
-                                                        className="flex-1 bg-transparent text-center font-bold text-lg text-gray-900 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                        className="flex-1 text-center text-sm font-medium text-gray-900 border-0 focus:outline-none focus:ring-0 py-2"
                                                         value={qty}
                                                         onChange={(e) => {
                                                             const val = parseInt(e.target.value);
-                                                            if (isNaN(val)) setQty('');
-                                                            else setQty(Math.min(selectedPart.quantity, Math.max(selectedPart.quantity > 0 ? 1 : 0, val)));
+                                                            if (!isNaN(val)) setQty(Math.min(selectedPart.quantity, Math.max(1, val)));
                                                         }}
+                                                        min="1"
+                                                        max={selectedPart.quantity}
                                                     />
                                                     <button
                                                         type="button"
                                                         onClick={() => setQty(prev => Math.min(selectedPart.quantity, Number(prev) + 1))}
                                                         disabled={qty >= selectedPart.quantity}
-                                                        className="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-100 text-gray-600 font-bold hover:bg-gray-50 transition-all shadow-sm active:scale-95 disabled:opacity-30 disabled:scale-100"
-                                                    >+</button>
+                                                        className="px-3 py-2 border-l border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                    >
+                                                        +
+                                                    </button>
                                                 </div>
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 ml-1">Job Note (Optional)</label>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1.5">Notes (optional)</label>
                                                 <input
                                                     type="text"
-                                                    placeholder="Add repair details..."
-                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:bg-white focus:border-blue-500 transition-all shadow-inner"
+                                                    placeholder="e.g., Screen replacement"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                                                     value={note}
                                                     onChange={(e) => setNote(e.target.value)}
                                                 />
@@ -326,16 +341,9 @@ const UseParts = () => {
                                         <button
                                             type="submit"
                                             disabled={loading || selectedPart.quantity < qty || qty < 1}
-                                            className="w-full bg-blue-600 text-white rounded-xl py-4 font-bold text-sm uppercase tracking-widest shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all active:scale-[0.98] flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed group"
+                                            className="w-full bg-blue-600 text-white px-4 py-2.5 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                         >
-                                            {loading ? (
-                                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                            ) : (
-                                                <>
-                                                    <CheckCircle2 size={18} className="group-hover:scale-110 transition-transform" />
-                                                    <span>Log Parts Usage</span>
-                                                </>
-                                            )}
+                                            {loading ? 'Processing...' : 'Record usage'}
                                         </button>
                                     </form>
                                 </div>

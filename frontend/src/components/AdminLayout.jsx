@@ -34,11 +34,17 @@ const AdminLayout = () => {
                         </div>
                     </div>
 
-                    <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-3">
                         <NotificationDropdown />
-                        <div className="text-right border-l border-gray-100 pl-4">
-                            <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
-                            <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+                        <div className="h-8 w-px bg-gray-200"></div>
+                        <div className="flex items-center space-x-3">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-xs shadow-sm">
+                                {user?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
+                            </div>
+                            <div className="text-left">
+                                <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
+                                <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+                            </div>
                         </div>
                     </div>
                 </header>

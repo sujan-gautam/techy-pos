@@ -179,15 +179,18 @@ const logUsage = asyncHandler(async (req, res) => {
         throw new Error('Quantity must be greater than zero');
     }
 
-    const inventory = await Inventory.findOne({ partId, storeId });
+    // Find inventory - if user has no storeId, search without store filter
+    const inventoryQuery = storeId ? { partId, storeId } : { partId };
+    const inventory = await Inventory.findOne(inventoryQuery);
+    
     if (!inventory) {
         res.status(404);
-        throw new Error('Inventory not found');
+        throw new Error(`Part not found in inventory${storeId ? ' for your store' : ''}. Please check the part ID.`);
     }
 
     if (inventory.quantity < qty) {
         res.status(400);
-        throw new Error('Insufficient stock available');
+        throw new Error(`Insufficient stock. Available: ${inventory.quantity}, Requested: ${qty}`);
     }
 
     const prevQty = inventory.quantity;
@@ -196,9 +199,9 @@ const logUsage = asyncHandler(async (req, res) => {
 
     await Transaction.create({
         partId,
-        storeId,
+        storeId: inventory.storeId, // Use inventory's storeId
         inventoryId: inventory._id,
-        type: 'adjustment', // Or 'usage' if preferred
+        type: 'adjustment',
         qtyChange: -Number(qty),
         prevQty,
         newQty: inventory.quantity,
@@ -207,7 +210,7 @@ const logUsage = asyncHandler(async (req, res) => {
         note: note || 'Technician quick-log usage (No Job Reference)'
     });
 
-    await checkLowStock(partId, storeId);
+    await checkLowStock(partId, inventory.storeId);
     res.json({ message: 'Usage logged successfully', inventory });
 });
 

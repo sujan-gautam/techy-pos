@@ -24,6 +24,7 @@ const invoiceRoutes = require('./src/routes/invoiceRoutes');
 const customerRoutes = require('./src/routes/customerRoutes');
 const supplierRoutes = require('./src/routes/supplierRoutes');
 const notificationRoutes = require('./src/routes/notificationRoutes');
+const settingsRoutes = require('./src/routes/settingsRoutes');
 
 dotenv.config();
 
@@ -48,6 +49,9 @@ if (process.env.NODE_ENV === 'development') {
     app.use(morgan('dev'));
 }
 
+// Serve uploads directory
+app.use('/uploads', express.static('uploads'));
+
 // Basic Route
 app.get('/', (req, res) => {
     res.send('API is running...');
@@ -66,6 +70,7 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Error Handling
 app.use(notFound);
