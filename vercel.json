@@ -1,18 +1,19 @@
 {
     "version": 2,
     "cleanUrls": true,
-    "rewrites": [
+    "routes": [
         {
-            "source": "/api/(.*)",
-            "destination": "/api/index.js"
+            "src": "/api/(.*)",
+            "dest": "/api/index.js"
         },
         {
-            "source": "/((?!api/).*)",
-            "destination": "/frontend/$1"
+            "src": "/(.*)",
+            "dest": "/frontend/$1",
+            "check": true
         },
         {
-            "source": "/((?!api/).*)",
-            "destination": "/frontend/index.html"
+            "src": "/(.*)",
+            "dest": "/frontend/index.html"
         }
     ],
     "builds": [
