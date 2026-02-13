@@ -19,9 +19,12 @@
             "dest": "/api/index.js"
         },
         {
-            "src": "/(.*)",
-            "dest": "/frontend/$1",
-            "check": true
+            "src": "/assets/(.*)",
+            "dest": "/frontend/assets/$1"
+        },
+        {
+            "src": "/(.*\\.(js|css|png|jpg|jpeg|gif|svg|ico|json|woff|woff2|ttf|eot))",
+            "dest": "/frontend/$1"
         },
         {
             "src": "/(.*)",
