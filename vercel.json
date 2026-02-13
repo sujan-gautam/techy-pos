@@ -8,8 +8,7 @@
         },
         {
             "source": "/((?!api/).*)",
-            "destination": "/frontend/dist/$1",
-            "continue": true
+            "destination": "/frontend/dist/$1"
         },
         {
             "source": "/((?!api/).*)",
