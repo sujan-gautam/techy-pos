@@ -6,7 +6,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 router.use(protect);
 
 router.route('/')
-    .get(authorize('admin', 'manager'), getUsers);
+    .get(authorize('admin', 'manager', 'technician'), getUsers);
 
 router.route('/:id')
     .put(authorize('admin'), updateUser)
