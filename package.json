@@ -12,7 +12,8 @@
         "start:backend": "cd backend && npm start",
         "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
         "dev:backend": "cd backend && npm run dev",
-        "dev:frontend": "cd frontend && npm run dev"
+        "dev:frontend": "cd frontend && npm run dev",
+        "build": "npm run build:frontend"
     },
     "dependencies": {
         "bcryptjs": "^2.4.3",
