@@ -8,11 +8,11 @@
         },
         {
             "source": "/((?!api/).*)",
-            "destination": "/frontend/dist/$1"
+            "destination": "/frontend/$1"
         },
         {
             "source": "/((?!api/).*)",
-            "destination": "/frontend/dist/index.html"
+            "destination": "/frontend/index.html"
         }
     ],
     "builds": [
