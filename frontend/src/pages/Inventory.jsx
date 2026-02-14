@@ -1,14 +1,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import api from '../api/axios';
-import {
-    Plus, Search, Filter, AlertCircle, Edit,
-    Wrench, Download, X, MoreHorizontal,
-    Minus
-} from 'lucide-react';
+import { Plus, Search, Edit, Wrench, Download, X, Minus } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext';
 import clsx from 'clsx';
-import TableSkeleton from '../components/skeletons/TableSkeleton';
 
 const Inventory = () => {
     const { user } = useAuth();
@@ -18,13 +13,9 @@ const Inventory = () => {
     const [selectedBrand, setSelectedBrand] = useState('Apple');
     const [selectedCategory, setSelectedCategory] = useState('Screen');
     const [selectedSeries, setSelectedSeries] = useState('all');
-
-    // Modals
     const [showAdjustModal, setShowAdjustModal] = useState(false);
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
-
-    // Form States
     const [adjustmentQty, setAdjustmentQty] = useState(0);
     const [assignmentQty, setAssignmentQty] = useState(1);
     const [assignmentNote, setAssignmentNote] = useState('');
@@ -33,6 +24,33 @@ const Inventory = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const canManageStock = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'technician';
+
+    // Aggressive cleaning to keep only Model + Category (Screen/Battery)
+    const getDisplayName = (part) => {
+        if (!part) return '';
+        let name = part.name || '';
+        const category = part.category === 'Screen' ? 'Screen' : part.category === 'Battery' ? 'Battery' : part.category || '';
+
+        // 1. Remove all typical marketing/junk terms
+        const junkTerms = [
+            /High-Quality/gi, /Screen Assembly/gi, /Super AMOLED/gi, /Service Pack/gi,
+            /LCD Display Assembly/gi, /Display Assembly/gi, /Premium/gi, /Genuine/gi,
+            /Replacement/gi, /Part/gi, /Module/gi, /Assembly/gi, /Full/gi, /Original/gi
+        ];
+        junkTerms.forEach(term => { name = name.replace(term, ''); });
+
+        // 2. Remove the category name from the string temporarily to clean the model name
+        if (category) {
+            const catRegex = new RegExp(category, 'gi');
+            name = name.replace(catRegex, '');
+        }
+
+        // 3. Clean up whitespace
+        name = name.replace(/\s+/g, ' ').trim();
+
+        // 4. Return clean Model + Category
+        return category ? `${name} ${category}` : name;
+    };
 
     const fetchData = async () => {
         try {
@@ -58,36 +76,121 @@ const Inventory = () => {
         fetchData();
     }, []);
 
-    // Reset series filter when brand or category changes
     useEffect(() => {
         setSelectedSeries('all');
     }, [selectedBrand, selectedCategory]);
 
+    // Aggressive model extraction - prioritized by specificity
+    const extractBaseModel = (item) => {
+        const part = item?.partId;
+        if (!part) return 'Other';
+
+        const brand = part.brand || '';
+        const series = part.series || '';
+        const name = part.name || '';
+        const s = `${series} ${name}`;
+
+        if (brand === 'Apple') {
+            // 1. Numbered models (17, 16, 15... down to 6)
+            const numMatch = s.match(/\b(1[1-7]|[6-9])\b/i) || s.match(/(1[1-7]|[6-9])/);
+            if (numMatch) return numMatch[1];
+
+            // 2. Handle X series strictly
+            if (/\bX[RS]?\b/i.test(s)) {
+                const xMatch = s.match(/\bX[RS]?\b/i);
+                return xMatch[0].toUpperCase();
+            }
+
+            // 3. Handle SE strictly
+            if (/\bSE\b/i.test(s)) return 'SE';
+        }
+
+        if (brand === 'Samsung') {
+            // Group by Galaxy S, A, Note, Z + Number
+            const samsungMatch = s.match(/\b([SAZ]|Note)\s*(\d+)/i);
+            if (samsungMatch) {
+                return `${samsungMatch[1].toUpperCase()}${samsungMatch[2]}`;
+            }
+            // Fallback for variants where number isn't easily extracted
+            const simpleSeries = series.match(/([SAZ]|Note) Series/i);
+            if (simpleSeries) return simpleSeries[1].toUpperCase();
+        }
+
+        return series || 'Other';
+    };
+
     const seriesList = useMemo(() => {
-        const series = new Set();
+        const baseModels = new Set();
         inventory.forEach(item => {
             if (item.partId?.brand === selectedBrand && item.partId?.category === selectedCategory) {
-                if (item.partId?.series) series.add(item.partId.series);
+                const baseModel = extractBaseModel(item);
+                if (baseModel) baseModels.add(baseModel);
             }
         });
-        return Array.from(series).sort();
+        return Array.from(baseModels).sort((a, b) => {
+            const getRank = (val) => {
+                if (val === 'SE') return -1;
+                // Samsung Separation (Z > S > Note > A)
+                if (val.startsWith('Z')) return 4000 + (parseInt(val.substring(1)) || 0);
+                if (val.startsWith('S')) return 3000 + (parseInt(val.substring(1)) || 0);
+                if (val.startsWith('Note')) return 2000 + (parseInt(val.substring(4)) || 0);
+                if (val.startsWith('A')) return 1000 + (parseInt(val.substring(1)) || 0);
+
+                if (val === 'X' || val === 'XR' || val === 'XS') return 10;
+                const num = parseInt(val);
+                return isNaN(num) ? -100 : num;
+            };
+            return getRank(b) - getRank(a);
+        });
     }, [inventory, selectedBrand, selectedCategory]);
 
     const filteredInventory = useMemo(() => {
-        return inventory.filter(item => {
+        const filtered = inventory.filter(item => {
             const part = item.partId;
             if (!part) return false;
-
-            const matchesSearch =
-                part.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                part.sku?.toLowerCase().includes(searchTerm.toLowerCase());
-
+            const matchesSearch = part.name?.toLowerCase().includes(searchTerm.toLowerCase());
             const matchesBrand = part.brand === selectedBrand;
             const matchesCategory = part.category === selectedCategory;
-            const matchesSeries = selectedSeries === 'all' || part.series === selectedSeries;
+
+            const baseModelOfItem = extractBaseModel(item);
+            const matchesSeries = selectedSeries === 'all' || baseModelOfItem === selectedSeries;
 
             return matchesSearch && matchesBrand && matchesCategory && matchesSeries;
         });
+
+        // Smart Merging for Redundant Parts (e.g., iPhone 12 and 12 Pro screens are same)
+        const merged = [];
+        const combined12Item = {
+            _id: null,
+            quantity: 0,
+            partId: null,
+            isMerged: true
+        };
+
+        const itemsToRemove = new Set();
+
+        filtered.forEach(item => {
+            const name = item.partId?.name || '';
+            const is12 = name.includes('iPhone 12') && !name.includes('12 Pro') && !name.includes('Mini') && !name.includes('Max');
+            const is12Pro = name.includes('iPhone 12 Pro') && !name.includes('Max');
+            const is12Combo = name.includes('12 / 12 Pro');
+
+            if (is12 || is12Pro || is12Combo) {
+                combined12Item.quantity += item.quantity;
+                // Prefer the combo part for the display data
+                if (is12Combo || (!combined12Item.partId)) {
+                    combined12Item.partId = item.partId;
+                    combined12Item._id = item._id; // Use this ID for adjustments
+                }
+                itemsToRemove.add(item._id);
+            }
+        });
+
+        if (combined12Item.partId) {
+            merged.push(combined12Item);
+        }
+
+        return [...filtered.filter(item => !itemsToRemove.has(item._id)), ...merged];
     }, [inventory, searchTerm, selectedBrand, selectedCategory, selectedSeries]);
 
     const handleAdjust = async (e) => {
@@ -133,106 +236,75 @@ const Inventory = () => {
     };
 
     if (loading) {
-        return (
-            <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <div className="h-8 w-32 bg-gray-200 rounded animate-pulse"></div>
-                        <div className="h-4 w-64 bg-gray-100 rounded animate-pulse mt-2"></div>
-                    </div>
-                </div>
-                <TableSkeleton rows={8} columns={5} />
-            </div>
-        );
+        return <div className="flex items-center justify-center h-96"><div className="text-gray-500">Loading...</div></div>;
     }
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
+        <div className="space-y-3">
+            {/* Compact Header */}
             <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Inventory</h1>
-                    <p className="text-gray-500 text-sm mt-1">Manage parts and track stock levels across the shop.</p>
-                </div>
-                <div className="flex items-center space-x-3">
-                    <button className="inline-flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        <Download size={16} />
-                        <span>Export</span>
+                <h1 className="text-xl font-semibold text-gray-900">Inventory</h1>
+                <div className="flex gap-2">
+                    <button className="px-3 py-1.5 text-xs border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1.5">
+                        <Download size={14} />
+                        Export
                     </button>
-                    <button className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm shadow-sm transition-all active:scale-95">
-                        <Plus size={16} />
-                        <span>Add Item</span>
+                    <button className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-1.5">
+                        <Plus size={14} />
+                        Add Part
                     </button>
                 </div>
             </div>
 
-            {/* Combined Filters and Search */}
-            <div className="space-y-4">
-                <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col md:flex-row gap-4 items-center justify-between shadow-sm">
-                    <div className="flex items-center space-x-4">
-                        <div className="flex bg-gray-100 p-1 rounded-md">
-                            {['Apple', 'Samsung'].map(brand => (
-                                <button
-                                    key={brand}
-                                    onClick={() => setSelectedBrand(brand)}
-                                    className={clsx(
-                                        "px-4 py-1.5 text-xs font-semibold rounded transition-all",
-                                        selectedBrand === brand ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                                    )}
-                                >
-                                    {brand}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex bg-gray-100 p-1 rounded-md">
-                            {['Screen', 'Battery'].map(cat => (
-                                <button
-                                    key={cat}
-                                    onClick={() => setSelectedCategory(cat)}
-                                    className={clsx(
-                                        "px-4 py-1.5 text-xs font-semibold rounded transition-all",
-                                        selectedCategory === cat ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                                    )}
-                                >
-                                    {cat}s
-                                </button>
-                            ))}
-                        </div>
+            {/* Compact Filters */}
+            <div className="bg-white border border-gray-200 rounded-lg p-2.5">
+                <div className="flex flex-wrap gap-2 items-center">
+                    <div className="flex gap-1 bg-gray-100 p-0.5 rounded">
+                        {['Apple', 'Samsung'].map(brand => (
+                            <button
+                                key={brand}
+                                onClick={() => setSelectedBrand(brand)}
+                                className={clsx("px-2.5 py-1 text-xs font-medium rounded", selectedBrand === brand ? "bg-white shadow" : "text-gray-600")}
+                            >
+                                {brand}
+                            </button>
+                        ))}
                     </div>
-
-                    <div className="relative w-full md:w-72">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <div className="flex gap-1 bg-gray-100 p-0.5 rounded">
+                        {['Screen', 'Battery'].map(cat => (
+                            <button
+                                key={cat}
+                                onClick={() => setSelectedCategory(cat)}
+                                className={clsx("px-2.5 py-1 text-xs font-medium rounded", selectedCategory === cat ? "bg-white shadow" : "text-gray-600")}
+                            >
+                                {cat}s
+                            </button>
+                        ))}
+                    </div>
+                    <div className="relative flex-1 max-w-xs">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                         <input
                             type="text"
-                            placeholder="Search by name or SKU..."
-                            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                            placeholder="Search..."
+                            className="w-full pl-8 pr-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
                 </div>
-
-                {/* Series Quick Filter Bar */}
                 {seriesList.length > 0 && (
-                    <div className="bg-white rounded-lg border border-gray-200 p-2 flex items-center space-x-2 overflow-x-auto no-scrollbar shadow-sm">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase px-2">Series:</span>
+                    <div className="flex gap-1.5 mt-2 overflow-x-auto">
                         <button
                             onClick={() => setSelectedSeries('all')}
-                            className={clsx(
-                                "px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors",
-                                selectedSeries === 'all' ? "bg-blue-50 text-blue-600 border border-blue-200" : "text-gray-600 hover:bg-gray-50"
-                            )}
+                            className={clsx("px-2.5 py-0.5 text-[11px] font-medium rounded-full whitespace-nowrap", selectedSeries === 'all' ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600")}
                         >
-                            All {selectedBrand}s
+                            All
                         </button>
                         {seriesList.map(series => (
                             <button
                                 key={series}
                                 onClick={() => setSelectedSeries(series)}
-                                className={clsx(
-                                    "px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors mb-0.5",
-                                    selectedSeries === series ? "bg-blue-50 text-blue-600 border border-blue-200" : "text-gray-500 hover:bg-gray-50"
-                                )}
+                                className={clsx("px-2.5 py-0.5 text-[11px] font-medium rounded-full whitespace-nowrap", selectedSeries === series ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600")}
                             >
                                 {series}
                             </button>
@@ -241,113 +313,139 @@ const Inventory = () => {
                 )}
             </div>
 
-            {/* Inventory Table */}
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-gray-50 border-b border-gray-200">
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">SKU</th>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Part Name</th>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">In Stock</th>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                            {filteredInventory.length === 0 ? (
-                                <tr>
-                                    <td colSpan="5" className="px-6 py-12 text-center text-gray-400 italic text-sm">
-                                        No items found.
-                                    </td>
-                                </tr>
-                            ) : (
-                                filteredInventory.map(item => (
-                                    <tr key={item._id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 text-sm text-gray-500 font-mono tracking-tighter">{item.partId?.sku}</td>
-                                        <td className="px-6 py-4">
-                                            <div className="text-sm font-bold text-gray-900">{item.partId?.name}</div>
-                                            <div className="text-xs text-gray-500 mt-0.5">{item.partId?.series}</div>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className={clsx(
-                                                "text-sm font-bold tabular-nums",
-                                                item.quantity === 0 ? "text-red-600 bg-red-50 px-2 py-0.5 rounded" :
-                                                    item.quantity <= (item.partId?.reorder_threshold || 5) ? "text-amber-600 bg-amber-50 px-2 py-0.5 rounded" : "text-gray-900"
-                                            )}>
-                                                {item.quantity}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <StatusPill quantity={item.quantity} threshold={item.partId?.reorder_threshold || 5} />
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end space-x-2">
-                                                <button
-                                                    onClick={() => {
-                                                        setSelectedItem(item);
-                                                        setAssignmentQty(1);
-                                                        setAssignmentNote('');
-                                                        fetchJobs();
-                                                        setShowAssignModal(true);
-                                                    }}
-                                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                                                    title="Assign to Job"
-                                                >
-                                                    <Wrench size={16} />
-                                                </button>
-                                                {canManageStock && (
+            {/* Grouped Grid Layout */}
+            {filteredInventory.length === 0 ? (
+                <div className="bg-white border border-gray-200 rounded-lg p-10 text-center">
+                    <p className="text-gray-400 text-sm">No items found</p>
+                </div>
+            ) : (
+                <div className="space-y-2">
+                    {(() => {
+                        // Group items by base model
+                        const grouped = {};
+                        filteredInventory.forEach(item => {
+                            const baseModel = extractBaseModel(item);
+                            if (!grouped[baseModel]) {
+                                grouped[baseModel] = [];
+                            }
+                            grouped[baseModel].push(item);
+                        });
+
+                        // Sort groups using the same logic as the filter chips
+                        const sortedGroups = Object.keys(grouped).sort((a, b) => {
+                            const getRank = (val) => {
+                                if (val === 'SE') return -1;
+                                if (val.startsWith('Z')) return 4000 + (parseInt(val.substring(1)) || 0);
+                                if (val.startsWith('S')) return 3000 + (parseInt(val.substring(1)) || 0);
+                                if (val.startsWith('Note')) return 2000 + (parseInt(val.substring(4)) || 0);
+                                if (val.startsWith('A')) return 1000 + (parseInt(val.substring(1)) || 0);
+
+                                if (val === 'X' || val === 'XR' || val === 'XS') return 10;
+                                const num = parseInt(val);
+                                return isNaN(num) ? -100 : num;
+                            };
+                            return getRank(b) - getRank(a);
+                        });
+
+                        return sortedGroups.map(baseModel => (
+                            <div key={baseModel} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                                {/* Compact Group Header */}
+                                <div className="bg-gray-50 px-3 py-1.5 border-b border-gray-200">
+                                    <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-tight">
+                                        {selectedBrand} {baseModel} {(!isNaN(parseInt(baseModel))) ? 'Series' : ''}
+                                    </h3>
+                                </div>
+
+                                {/* Dense Group Items */}
+                                <div className="p-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
+                                    {grouped[baseModel].map(item => (
+                                        <div key={item._id} className="border border-gray-200 rounded p-2 hover:border-blue-300 transition-colors bg-white">
+                                            <div className="flex items-start justify-between gap-1.5 mb-1.5">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-xs font-semibold text-gray-900 leading-tight">
+                                                        {getDisplayName(item.partId)}
+                                                    </div>
+                                                    <div className="text-[10px] text-gray-500">
+                                                        {item.partId?.series}
+                                                    </div>
+                                                </div>
+                                                <div className="flex-shrink-0">
+                                                    {item.quantity === 0 ? (
+                                                        <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-bold bg-red-100 text-red-700">OUT</span>
+                                                    ) : item.quantity <= (item.partId?.reorder_threshold || 5) ? (
+                                                        <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-700">LOW</span>
+                                                    ) : (
+                                                        <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-bold bg-green-100 text-green-700">OK</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center justify-between pt-1.5 border-t border-gray-100">
+                                                <div className={clsx("text-xl font-bold leading-none", item.quantity === 0 ? "text-red-600" : item.quantity <= (item.partId?.reorder_threshold || 5) ? "text-amber-600" : "text-gray-900")}>
+                                                    {item.quantity}
+                                                </div>
+                                                <div className="flex gap-0.5">
                                                     <button
                                                         onClick={() => {
                                                             setSelectedItem(item);
-                                                            setAdjustmentQty(0);
-                                                            setShowAdjustModal(true);
+                                                            setAssignmentQty(1);
+                                                            setAssignmentNote('');
+                                                            fetchJobs();
+                                                            setShowAssignModal(true);
                                                         }}
-                                                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-                                                        title="Update Stock"
+                                                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                                                        title="Assign"
                                                     >
-                                                        <Edit size={16} />
+                                                        <Wrench size={14} />
                                                     </button>
-                                                )}
+                                                    {canManageStock && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setSelectedItem(item);
+                                                                setAdjustmentQty(0);
+                                                                setShowAdjustModal(true);
+                                                            }}
+                                                            className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"
+                                                            title="Adjust"
+                                                        >
+                                                            <Edit size={14} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ));
+                    })()}
                 </div>
-            </div>
+            )}
 
-            {/* Adjust Stock Modal */}
+            {/* Adjust Modal */}
             {showAdjustModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/50 p-4">
-                    <div className="bg-white rounded-lg w-full max-w-sm shadow-xl border border-gray-100 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-tight">Stock Adjustment</h2>
-                            <button onClick={() => setShowAdjustModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-lg w-full max-w-md shadow-xl">
+                        <div className="px-4 py-3 border-b flex items-center justify-between">
+                            <h3 className="text-lg font-semibold">Adjust Stock</h3>
+                            <button onClick={() => setShowAdjustModal(false)} className="text-gray-400 hover:text-gray-600">
                                 <X size={20} />
                             </button>
                         </div>
-                        <form onSubmit={handleAdjust} className="p-6 space-y-6">
-                            <div className="space-y-1">
-                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Product</p>
-                                <p className="text-sm font-bold text-gray-900">{selectedItem?.partId?.name}</p>
-                                <p className="text-xs text-gray-500 font-mono">{selectedItem?.partId?.sku}</p>
+                        <form onSubmit={handleAdjust} className="p-4 space-y-4">
+                            <div>
+                                <p className="text-sm font-medium text-gray-900">{getDisplayName(selectedItem?.partId)}</p>
+                                <p className="text-xs text-gray-500">{selectedItem?.partId?.series}</p>
                             </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-xs font-bold text-gray-500">Current Stock</label>
-                                    <div className="w-full bg-gray-50 border border-gray-200 rounded-md px-3 py-2 text-sm font-bold text-gray-800">
-                                        {selectedItem?.quantity}
-                                    </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Current</label>
+                                    <div className="px-3 py-2 bg-gray-50 border rounded text-sm font-semibold">{selectedItem?.quantity}</div>
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-bold text-gray-500">Change (+/-)</label>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Change (+/-)</label>
                                     <input
                                         type="number"
-                                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-bold focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                        className="w-full px-3 py-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         value={adjustmentQty}
                                         onChange={(e) => setAdjustmentQty(e.target.value)}
                                         autoFocus
@@ -355,24 +453,14 @@ const Inventory = () => {
                                     />
                                 </div>
                             </div>
-
-                            <div className="p-4 bg-gray-50 border border-gray-100 rounded-md flex justify-between items-center">
-                                <span className="text-xs font-bold text-gray-500">New Quantity</span>
-                                <span className="text-xl font-black text-gray-900 tabular-nums">
-                                    {Number(selectedItem?.quantity) + Number(adjustmentQty)}
-                                </span>
+                            <div className="p-3 bg-blue-50 rounded flex justify-between items-center">
+                                <span className="text-xs font-medium text-blue-900">New Total</span>
+                                <span className="text-lg font-bold text-blue-900">{Number(selectedItem?.quantity) + Number(adjustmentQty)}</span>
                             </div>
-
-                            <div className="flex items-center gap-3 pt-2">
-                                <button type="button" onClick={() => setShowAdjustModal(false)} className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 rounded-md border border-gray-200 transition-colors">
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting || Number(adjustmentQty) === 0}
-                                    className="flex-1 px-4 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-md hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm"
-                                >
-                                    {isSubmitting ? 'Saving...' : 'Save Stock'}
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => setShowAdjustModal(false)} className="flex-1 px-4 py-2 text-sm border rounded hover:bg-gray-50">Cancel</button>
+                                <button type="submit" disabled={isSubmitting || Number(adjustmentQty) === 0} className="flex-1 px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
+                                    {isSubmitting ? 'Saving...' : 'Save'}
                                 </button>
                             </div>
                         </form>
@@ -380,115 +468,70 @@ const Inventory = () => {
                 </div>
             )}
 
-            {/* Assign Part Modal */}
+            {/* Assign Modal */}
             {showAssignModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-xl w-full max-w-sm shadow-2xl border border-gray-200 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                            <h2 className="text-sm font-bold text-gray-900">Assign to Job</h2>
-                            <button onClick={() => setShowAssignModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-lg w-full max-w-md shadow-xl">
+                        <div className="px-4 py-3 border-b flex items-center justify-between">
+                            <h3 className="text-lg font-semibold">Assign to Job</h3>
+                            <button onClick={() => setShowAssignModal(false)} className="text-gray-400 hover:text-gray-600">
                                 <X size={20} />
                             </button>
                         </div>
-                        <form onSubmit={handleAssign} className="p-6 space-y-6">
-                            {/* Item Header */}
-                            <div className="space-y-1">
-                                <p className="text-sm font-bold text-gray-900">{selectedItem?.partId?.name}</p>
-                                <p className="text-[11px] text-gray-500 font-mono tracking-wider uppercase">SKU: {selectedItem?.partId?.sku}</p>
-                                <div className="flex items-center space-x-2 pt-1">
-                                    <div className="w-1 h-1 rounded-full bg-blue-500"></div>
-                                    <p className="text-xs text-gray-600 font-medium">Available Inventory: <span className="font-bold text-gray-900 lowercase">{selectedItem?.quantity} units</span></p>
-                                </div>
+                        <form onSubmit={handleAssign} className="p-4 space-y-4">
+                            <div>
+                                <p className="text-sm font-medium text-gray-900">{getDisplayName(selectedItem?.partId)}</p>
+                                <p className="text-xs text-gray-500">Available: {selectedItem?.quantity}</p>
                             </div>
-
-                            <div className="space-y-4">
-                                {/* Job Selector */}
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Repair Job</label>
-                                    <select
-                                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-semibold focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white outline-none appearance-none cursor-pointer"
-                                        value={selectedJob}
-                                        onChange={(e) => setSelectedJob(e.target.value)}
-                                        required
-                                    >
-                                        <option value="">Choose active job...</option>
-                                        {activeJobs.map(job => (
-                                            <option key={job._id} value={job._id}>#{job.jobId} &mdash; {job.device_model} ({job.customer?.name})</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {/* Quantity Selector - Big Tech POS Style */}
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Usage Quantity</label>
-                                    <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm">
-                                        <button
-                                            type="button"
-                                            onClick={() => setAssignmentQty(Math.max(1, assignmentQty - 1))}
-                                            className="p-3 text-gray-400 hover:text-gray-900 border-r border-gray-200 transition-colors bg-gray-50"
-                                        >
-                                            <Minus size={18} />
-                                        </button>
-                                        <div className="flex-1 text-center text-sm font-black tabular-nums text-gray-900">
-                                            {assignmentQty}
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setAssignmentQty(Math.min(selectedItem?.quantity, assignmentQty + 1))}
-                                            className="p-3 text-gray-400 hover:text-gray-900 border-l border-gray-200 transition-colors bg-gray-50"
-                                        >
-                                            <Plus size={18} />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Job Note */}
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Job Note (Optional)</label>
-                                    <textarea
-                                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                                        rows="2"
-                                        placeholder="Add repair details or notes..."
-                                        value={assignmentNote}
-                                        onChange={(e) => setAssignmentNote(e.target.value)}
-                                    ></textarea>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 pt-2">
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting || !selectedJob || selectedItem?.quantity === 0}
-                                    className="flex-1 px-4 py-3 bg-slate-900 text-white text-xs font-bold uppercase tracking-[0.2em] rounded-lg hover:bg-slate-800 disabled:opacity-50 shadow-md transition-all active:scale-[0.98]"
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Job</label>
+                                <select
+                                    className="w-full px-3 py-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={selectedJob}
+                                    onChange={(e) => setSelectedJob(e.target.value)}
+                                    required
                                 >
-                                    {isSubmitting ? 'Syncing...' : 'Log Parts Usage'}
-                                </button>
+                                    <option value="">Select job...</option>
+                                    {activeJobs.map(job => (
+                                        <option key={job._id} value={job._id}>#{job.jobId} - {job.device_model} ({job.customer?.name})</option>
+                                    ))}
+                                </select>
                             </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                                <div className="flex items-center border rounded overflow-hidden">
+                                    <button type="button" onClick={() => setAssignmentQty(Math.max(1, assignmentQty - 1))} className="px-3 py-2 bg-gray-50 hover:bg-gray-100 border-r">
+                                        <Minus size={16} />
+                                    </button>
+                                    <div className="flex-1 text-center py-2 font-semibold">{assignmentQty}</div>
+                                    <button type="button" onClick={() => setAssignmentQty(Math.min(selectedItem?.quantity, assignmentQty + 1))} className="px-3 py-2 bg-gray-50 hover:bg-gray-100 border-l">
+                                        <Plus size={16} />
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Note</label>
+                                <textarea
+                                    className="w-full px-3 py-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                                    rows="2"
+                                    placeholder="Optional note..."
+                                    value={assignmentNote}
+                                    onChange={(e) => setAssignmentNote(e.target.value)}
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={isSubmitting || !selectedJob || selectedItem?.quantity === 0}
+                                className="w-full px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                {isSubmitting ? 'Assigning...' : 'Assign'}
+                            </button>
                         </form>
                     </div>
                 </div>
             )}
         </div>
     );
-};
-
-const StatusPill = ({ quantity, threshold }) => {
-    if (quantity === 0) {
-        return <span className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest bg-red-100 text-red-700 border border-red-200">
-            <div className="w-1 h-1 rounded-full bg-red-500"></div>
-            <span>Out of Stock</span>
-        </span>;
-    }
-    if (quantity <= threshold) {
-        return <span className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest bg-yellow-100 text-yellow-700 border border-yellow-200">
-            <div className="w-1 h-1 rounded-full bg-yellow-500"></div>
-            <span>Low Stock</span>
-        </span>;
-    }
-    return <span className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest bg-green-100 text-green-700 border border-green-200">
-        <div className="w-1 h-1 rounded-full bg-green-500"></div>
-        <span>In Stock</span>
-    </span>;
 };
 
 export default Inventory;

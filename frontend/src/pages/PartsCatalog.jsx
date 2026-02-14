@@ -43,13 +43,96 @@ const PartsCatalog = () => {
         return () => clearTimeout(delayDebounceFn);
     }, [searchTerm, selectedBrand, selectedCategory, selectedSeries]);
 
+    // Aggressive cleaning to keep only Model + Category (Screen/Battery)
+    const getDisplayName = (part) => {
+        if (!part) return '';
+        let name = part.name || '';
+        const category = part.category === 'Screen' ? 'Screen' : part.category === 'Battery' ? 'Battery' : part.category || '';
+
+        // 1. Remove all typical marketing/junk terms
+        const junkTerms = [
+            /High-Quality/gi, /Screen Assembly/gi, /Super AMOLED/gi, /Service Pack/gi,
+            /LCD Display Assembly/gi, /Display Assembly/gi, /Premium/gi, /Genuine/gi,
+            /Replacement/gi, /Part/gi, /Module/gi, /Assembly/gi, /Full/gi, /Original/gi
+        ];
+        junkTerms.forEach(term => { name = name.replace(term, ''); });
+
+        // 2. Remove the category name from the string temporarily to clean the model name
+        if (category) {
+            const catRegex = new RegExp(category, 'gi');
+            name = name.replace(catRegex, '');
+        }
+
+        // 3. Clean up whitespace
+        name = name.replace(/\s+/g, ' ').trim();
+
+        // 4. Return clean Model + Category
+        return category ? `${name} ${category}` : name;
+    };
+
+    // Aggressive model extraction - prioritized by specificity
+    const extractBaseModel = (part) => {
+        if (!part) return 'Other';
+        const brand = part.brand || '';
+        const series = part.series || '';
+        const name = part.name || '';
+        const s = `${series} ${name}`;
+
+        if (brand === 'Apple') {
+            const numMatch = s.match(/\b(1[1-7]|[6-9])\b/i) || s.match(/(1[1-7]|[6-9])/);
+            if (numMatch) return numMatch[1];
+            if (/\bX[RS]?\b/i.test(s)) {
+                const xMatch = s.match(/\bX[RS]?\b/i);
+                return xMatch[0].toUpperCase();
+            }
+            if (/\bSE\b/i.test(s)) return 'SE';
+        }
+
+        if (brand === 'Samsung') {
+            const samsungMatch = s.match(/\b([SAZ]|Note)\s*(\d+)/i);
+            if (samsungMatch) return `${samsungMatch[1].toUpperCase()}${samsungMatch[2]}`;
+            const simpleSeries = series.match(/([SAZ]|Note) Series/i);
+            if (simpleSeries) return simpleSeries[1].toUpperCase();
+        }
+
+        return series || 'Other';
+    };
+
     const seriesList = useMemo(() => {
-        const series = new Set();
+        const baseModels = new Set();
         parts.forEach(part => {
-            if (part.series) series.add(part.series);
+            if (part.brand === selectedBrand && part.category === selectedCategory) {
+                const baseModel = extractBaseModel(part);
+                if (baseModel) baseModels.add(baseModel);
+            }
         });
-        return Array.from(series).sort();
-    }, [parts]);
+
+        return Array.from(baseModels).sort((a, b) => {
+            const getRank = (val) => {
+                if (val === 'SE') return -1;
+                if (val.startsWith('Z')) return 4000 + (parseInt(val.substring(1)) || 0);
+                if (val.startsWith('S')) return 3000 + (parseInt(val.substring(1)) || 0);
+                if (val.startsWith('Note')) return 2000 + (parseInt(val.substring(4)) || 0);
+                if (val.startsWith('A')) return 1000 + (parseInt(val.substring(1)) || 0);
+                if (val === 'X' || val === 'XR' || val === 'XS') return 10;
+                const num = parseInt(val);
+                return isNaN(num) ? -100 : num;
+            };
+            return getRank(b) - getRank(a);
+        });
+    }, [parts, selectedBrand, selectedCategory]);
+
+    const filteredParts = useMemo(() => {
+        return parts.filter(part => {
+            const matchesSearch = part.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                part.sku?.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesBrand = part.brand === selectedBrand;
+            const matchesCategory = part.category === selectedCategory;
+            const baseModelOfItem = extractBaseModel(part);
+            const matchesSeries = selectedSeries === 'all' || baseModelOfItem === selectedSeries;
+            return matchesSearch && matchesBrand && matchesCategory && matchesSeries;
+        });
+    }, [parts, searchTerm, selectedBrand, selectedCategory, selectedSeries]);
 
     const handleOpenCreate = () => {
         setIsEditing(false);
@@ -102,152 +185,173 @@ const PartsCatalog = () => {
                         <div className="h-8 w-32 bg-gray-200 rounded animate-pulse"></div>
                         <div className="h-4 w-80 bg-gray-100 rounded animate-pulse mt-2"></div>
                     </div>
-                    <div className="h-10 w-32 bg-blue-100 rounded animate-pulse"></div>
                 </div>
-                <div className="flex gap-6">
-                    <div className="w-64 h-96 bg-white border border-gray-200 rounded-lg animate-pulse"></div>
-                    <div className="flex-1">
-                        <TableSkeleton rows={8} columns={4} />
-                    </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+                        <div key={i} className="h-32 bg-white border border-gray-200 rounded-xl animate-pulse"></div>
+                    ))}
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Parts Library</h1>
-                    <p className="text-gray-500 text-sm mt-1 font-medium">Manage specifications and retail pricing for all components.</p>
+                    <h1 className="text-xl font-bold text-gray-900">Parts Library</h1>
+                    <p className="text-gray-500 text-xs mt-0.5">Manage specifications and retail pricing for all components.</p>
                 </div>
                 <button
                     onClick={handleOpenCreate}
-                    className="inline-flex items-center space-x-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold text-sm shadow-md transition-all active:scale-95"
+                    className="inline-flex items-center space-x-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold text-[13px] shadow-sm transition-all active:scale-95"
                 >
-                    <Plus size={18} />
+                    <Plus size={16} />
                     <span>Add New Part</span>
                 </button>
             </div>
 
-            {/* Filter Navigation */}
-            <div className="bg-white rounded-lg border border-gray-200 p-1.5 flex items-center space-x-2 w-fit shadow-sm">
-                <button
-                    onClick={() => { setSelectedBrand('Apple'); setSelectedSeries(null); }}
-                    className={`px-5 py-2 rounded-md text-sm font-semibold transition-all ${selectedBrand === 'Apple' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
-                >
-                    Apple
-                </button>
-                <button
-                    onClick={() => { setSelectedBrand('Samsung'); setSelectedSeries(null); }}
-                    className={`px-5 py-2 rounded-md text-sm font-semibold transition-all ${selectedBrand === 'Samsung' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
-                >
-                    Samsung
-                </button>
-                <div className="w-px h-5 bg-gray-200 mx-2"></div>
-                <button
-                    onClick={() => { setSelectedCategory('Screen'); setSelectedSeries(null); }}
-                    className={`px-5 py-2 rounded-md text-sm font-semibold transition-all ${selectedCategory === 'Screen' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'text-gray-500 hover:text-gray-900'}`}
-                >
-                    Screens
-                </button>
-                <button
-                    onClick={() => { setSelectedCategory('Battery'); setSelectedSeries(null); }}
-                    className={`px-5 py-2 rounded-md text-sm font-semibold transition-all ${selectedCategory === 'Battery' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'text-gray-500 hover:text-gray-900'}`}
-                >
-                    Batteries
-                </button>
+            {/* Filter Bar */}
+            <div className="flex flex-col sm:flex-row gap-3">
+                <div className="bg-white rounded-lg border border-gray-200 p-1 flex items-center space-x-1 w-fit shadow-sm">
+                    <button
+                        onClick={() => { setSelectedBrand('Apple'); setSelectedSeries('all'); }}
+                        className={`px-4 py-1.5 rounded text-[13px] font-bold transition-all ${selectedBrand === 'Apple' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                    >
+                        Apple
+                    </button>
+                    <button
+                        onClick={() => { setSelectedBrand('Samsung'); setSelectedSeries('all'); }}
+                        className={`px-4 py-1.5 rounded text-[13px] font-bold transition-all ${selectedBrand === 'Samsung' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                    >
+                        Samsung
+                    </button>
+                    <div className="w-px h-4 bg-gray-200 mx-1"></div>
+                    <button
+                        onClick={() => { setSelectedCategory('Screen'); setSelectedSeries('all'); }}
+                        className={`px-4 py-1.5 rounded text-[13px] font-bold transition-all ${selectedCategory === 'Screen' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'text-gray-500 hover:text-gray-900'}`}
+                    >
+                        Screens
+                    </button>
+                    <button
+                        onClick={() => { setSelectedCategory('Battery'); setSelectedSeries('all'); }}
+                        className={`px-4 py-1.5 rounded text-[13px] font-bold transition-all ${selectedCategory === 'Battery' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'text-gray-500 hover:text-gray-900'}`}
+                    >
+                        Batteries
+                    </button>
+                </div>
+
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <input
+                        type="text"
+                        placeholder="Search by name or SKU..."
+                        className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm transition-all"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
             </div>
 
-            {/* Main Layout */}
-            <div className="flex gap-6">
-                {/* Series Sidebar */}
-                <div className="w-64 flex-shrink-0 bg-white rounded-xl border border-gray-200 p-4 shadow-sm h-fit">
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 px-2">Series</h3>
-                    <div className="space-y-1">
+            {/* Series Quick Filter */}
+            {seriesList.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pb-2">
+                    <button
+                        onClick={() => setSelectedSeries('all')}
+                        className={`px-3 py-1 rounded-full text-[11px] font-bold border transition-all ${selectedSeries === 'all' ? 'bg-gray-900 text-white border-gray-900 shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}
+                    >
+                        All Models
+                    </button>
+                    {seriesList.map(baseModel => (
                         <button
-                            onClick={() => setSelectedSeries(null)}
-                            className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center justify-between ${selectedSeries === null ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
+                            key={baseModel}
+                            onClick={() => setSelectedSeries(baseModel)}
+                            className={`px-3 py-1 rounded-full text-[11px] font-bold border transition-all ${selectedSeries === baseModel ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
                         >
-                            <span>All Models</span>
-                            {selectedSeries === null && <ChevronRight size={14} />}
+                            {baseModel}
                         </button>
-                        {seriesList.map(series => (
-                            <button
-                                key={series}
-                                onClick={() => setSelectedSeries(series)}
-                                className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center justify-between ${selectedSeries === series ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
-                            >
-                                <span>{series}</span>
-                                {selectedSeries === series && <ChevronRight size={14} />}
-                            </button>
-                        ))}
-                    </div>
+                    ))}
                 </div>
+            )}
 
-                {/* Content Area */}
-                <div className="flex-1 space-y-4">
-                    <div className="relative">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                        <input
-                            type="text"
-                            placeholder="Search library by name or SKU..."
-                            className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium shadow-sm transition-all"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
+            {/* Grouped Grid Layout */}
+            {filteredParts.length === 0 ? (
+                <div className="bg-white border border-gray-200 rounded-lg p-10 text-center">
+                    <p className="text-gray-400 text-sm font-medium">No parts found in this category</p>
+                </div>
+            ) : (
+                <div className="space-y-2">
+                    {(() => {
+                        // Group items by base model
+                        const grouped = {};
+                        filteredParts.forEach(part => {
+                            const baseModel = extractBaseModel(part);
+                            if (!grouped[baseModel]) grouped[baseModel] = [];
+                            grouped[baseModel].push(part);
+                        });
 
-                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-gray-50/50 border-b border-gray-200">
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">SKU & Ref</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Specification</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Price</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {parts.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="4" className="px-6 py-12 text-center text-gray-400 font-medium">No parts found</td>
-                                    </tr>
-                                ) : parts.map(part => (
-                                    <tr key={part._id} className="hover:bg-gray-50/50 transition-colors group">
-                                        <td className="px-6 py-5">
-                                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100">
-                                                {part.sku}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-5">
-                                            <div className="text-sm font-bold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">{part.name}</div>
-                                            <div className="flex items-center text-xs text-gray-500 font-medium space-x-2">
-                                                <span>{part.brand}</span>
-                                                <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                                                <span>{part.category}</span>
+                        // Sort groups using the same logic as the filter chips
+                        const sortedGroups = Object.keys(grouped).sort((a, b) => {
+                            const getRank = (val) => {
+                                if (val === 'SE') return -1;
+                                if (val.startsWith('Z')) return 4000 + (parseInt(val.substring(1)) || 0);
+                                if (val.startsWith('S')) return 3000 + (parseInt(val.substring(1)) || 0);
+                                if (val.startsWith('Note')) return 2000 + (parseInt(val.substring(4)) || 0);
+                                if (val.startsWith('A')) return 1000 + (parseInt(val.substring(1)) || 0);
+                                if (val === 'X' || val === 'XR' || val === 'XS') return 10;
+                                const num = parseInt(val);
+                                return isNaN(num) ? -100 : num;
+                            };
+                            return getRank(b) - getRank(a);
+                        });
+
+                        return sortedGroups.map(baseModel => (
+                            <div key={baseModel} className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                                {/* Compact Group Header */}
+                                <div className="bg-gray-50 px-3 py-1.5 border-b border-gray-200">
+                                    <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-tight">
+                                        {selectedBrand} {baseModel} {(!isNaN(parseInt(baseModel))) ? 'Series' : ''}
+                                    </h3>
+                                </div>
+
+                                {/* Dense Group Items */}
+                                <div className="p-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
+                                    {grouped[baseModel].map(part => (
+                                        <div key={part._id} className="border border-gray-200 rounded p-2 hover:border-blue-300 transition-colors bg-white relative group">
+                                            <div className="flex flex-col h-full">
+                                                <div className="mb-1.5">
+                                                    <div className="text-[10px] font-bold text-blue-600 uppercase font-mono mb-0.5">{part.sku}</div>
+                                                    <div className="text-xs font-bold text-gray-900 leading-tight">
+                                                        {getDisplayName(part)}
+                                                    </div>
+                                                    <div className="text-[10px] text-gray-400 font-medium">
+                                                        {part.series}
+                                                    </div>
+                                                </div>
+
+                                                <div className="mt-auto pt-1.5 border-t border-gray-100 flex items-center justify-between">
+                                                    <div>
+                                                        <div className="text-sm font-bold text-gray-900">${part.retail_price?.toFixed(2)}</div>
+                                                        <div className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">Retail Price</div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleOpenEdit(part)}
+                                                        className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
+                                                        title="Edit Specification"
+                                                    >
+                                                        <Edit2 size={13} />
+                                                    </button>
+                                                </div>
                                             </div>
-                                        </td>
-                                        <td className="px-6 py-5 text-right font-mono">
-                                            <div className="text-sm font-bold text-gray-900">${part.retail_price?.toFixed(2)}</div>
-                                            <div className="text-[10px] text-gray-400 font-bold uppercase">Retail</div>
-                                        </td>
-                                        <td className="px-6 py-5 text-right">
-                                            <button
-                                                onClick={() => handleOpenEdit(part)}
-                                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                                            >
-                                                <Edit2 size={16} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ));
+                    })()}
                 </div>
-            </div>
+            )}
 
             {/* Modal */}
             {showModal && (

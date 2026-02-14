@@ -24,6 +24,7 @@ import CustomerDetails from './pages/CustomerDetails';
 import Suppliers from './pages/Suppliers';
 import UseParts from './pages/UseParts';
 import UsageLogs from './pages/UsageLogs';
+import Notes from './pages/Notes';
 import AdminSettings from './pages/AdminSettings';
 import AdminLayout from './components/AdminLayout';
 import { SiteSettingsProvider } from './context/SiteSettingsContext';
@@ -70,6 +71,7 @@ const App = () => {
               <Route path="jobs/:id" element={<JobDetails />} />
               <Route path="use-parts" element={<UseParts />} />
               <Route path="usage-logs" element={<UsageLogs />} />
+              <Route path="notes" element={<Notes />} />
               <Route path="inventory" element={<Inventory />} />
               <Route path="parts" element={<PartsCatalog />} />
               <Route path="invoices" element={<Invoices />} />

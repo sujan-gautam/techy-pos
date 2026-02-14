@@ -25,6 +25,7 @@ const customerRoutes = require('./src/routes/customerRoutes');
 const supplierRoutes = require('./src/routes/supplierRoutes');
 const notificationRoutes = require('./src/routes/notificationRoutes');
 const settingsRoutes = require('./src/routes/settingsRoutes');
+const noteRoutes = require('./src/routes/noteRoutes');
 
 dotenv.config();
 
@@ -71,6 +72,7 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/notes', noteRoutes);
 
 // Error Handling
 app.use(notFound);

@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-    LayoutDashboard, Wrench, Package, Users,
+    LayoutDashboard, Wrench, Package, Users, StickyNote,
     FileText, ShoppingCart, Truck, LogOut, Settings, BarChart2, ShieldCheck, History
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -46,6 +46,12 @@ const Sidebar = () => {
             name: 'Usage Logs',
             path: '/usage-logs',
             icon: History,
+            allowedRoles: ['admin', 'manager', 'technician']
+        },
+        {
+            name: 'My Notebook',
+            path: '/notes',
+            icon: StickyNote,
             allowedRoles: ['admin', 'manager', 'technician']
         },
         {
